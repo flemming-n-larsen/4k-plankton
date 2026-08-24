@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "baselineDate": "2026-08-24",
+  "releasePolicy": "stable-only",
+  "tools": {
+    "buildTools": {
+      "product": "Visual Studio Build Tools 2026",
+      "release": "18.9.1",
+      "build": "12112.369",
+      "source": "https://learn.microsoft.com/en-us/visualstudio/releases/2026/release-history"
+    },
+    "msvc": {
+      "version": "14.51.36231",
+      "compilerFileVersion": "19.51.36256.0",
+      "target": "x86",
+      "host": "x64"
+    },
+    "windowsSdk": {
+      "release": "10.0.28000.2705",
+      "installedVersion": "10.1.28000.2705",
+      "toolchainVersion": "10.0.28000.0",
+      "source": "https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads"
+    },
+    "powerShell": { "version": "7.6.5", "source": "https://github.com/PowerShell/PowerShell/releases/tag/v7.6.5" },
+    "crinkler": {
+      "version": "3.0b",
+      "relativePath": ".tools/crinkler/3.0b/crinkler30b/Win64/Crinkler.exe",
+      "sha256": "86E4D861105DE24A9F599A5E7319E45D052C0DC2413BBE7A08FBD71AB5FB49D8",
+      "source": "https://github.com/runestubbe/Crinkler/releases/tag/v3.0b"
+    },
+    "shaderMinifier": { "version": "1.6.0", "required": false, "source": "https://github.com/laurentlb/shader-minifier/releases/tag/1.6.0" }
+  }
+}

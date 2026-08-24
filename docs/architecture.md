@@ -97,6 +97,12 @@ The project should plan for separate build variants from the beginning:
 
 The compo build must not be treated as the only artifact. A safe build is useful for diagnosing compatibility problems introduced by aggressive size optimizations or executable packing.
 
+## Bootstrap milestone
+
+The first runnable milestone is intentionally small: a CRT-free Win32/x86 executable that creates an OpenGL 2.1 context and renders one rectangle. It has no audio, asset pipeline, external graphics framework, or runtime dependency beyond the Windows system libraries and OpenGL driver.
+
+**Debug** runs the rectangle in a normal window. **Compo** runs it in a borderless primary-monitor window, links it with Crinkler, and fails the build if the final executable exceeds 4096 bytes. The planned **Safe** variant begins after this path is validated.
+
 ## Planned build pipeline
 
 The intended pipeline is:
@@ -113,7 +119,7 @@ Crinkler compression and linking
 final executable and size report
 ```
 
-PowerShell should expose stable commands for the Debug, Safe, and Compo variants. Coding agents and human developers should use those same commands; builds must not depend on IDE projects, IDE state, or manually configured editor tasks.
+PowerShell exposes stable Debug and Compo commands for the bootstrap milestone; Safe is added when compatibility behavior exists to validate. Coding agents and human developers should use those same commands; builds must not depend on IDE projects, IDE state, or manually configured editor tasks.
 
 The concrete installation and invocation details will be added to [toolchain.md](toolchain.md) as the build is implemented. Tool versions, discovery rules, expected paths, compiler flags, Crinkler options, and generated-file policy must be pinned there once validated.
 
