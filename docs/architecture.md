@@ -20,6 +20,23 @@ References:
 - [Crinkler](https://github.com/runestubbe/Crinkler)
 - [Revision 2026 PC competition rules](https://2026.revision-party.net/competitions/pc/)
 
+## Toolchain decision
+
+The baseline is a fully headless Windows command-line toolchain. Neither Visual Studio nor Visual Studio Code is required.
+
+The initial stack is:
+
+- **Standalone Microsoft C++ Build Tools and Windows SDK** for `cl.exe`, Windows headers, and import libraries, targeting Win32/x86;
+- **PowerShell build scripts** as the build driver and the documented interface used by developers and coding agents;
+- **Shader Minifier** for release shader processing;
+- **Crinkler** as the final linker and executable compressor.
+
+CMake is not part of the initial baseline. The project is small, Windows-specific, and has a specialized generation and linking pipeline, so direct scripts keep every command and size-related option visible. CMake may be reconsidered if the project grows enough to benefit from it.
+
+NASM, Python, Sointu, and other generators are optional rather than baseline dependencies. They should be added only when a selected implementation requires them. In particular, choosing an audio backend may introduce its own editor, compiler, assembler, or code-generation step.
+
+The Microsoft package retains the *Visual Studio Build Tools* product name, but it installs the compiler and SDK without requiring the Visual Studio IDE. Build scripts should initialize its command-line environment and invoke the tools directly. See [toolchain.md](toolchain.md) for the stack responsibilities and intended command interface.
+
 ## Architectural boundaries
 
 The intro should be organized around replaceable subsystems rather than a single framework-specific implementation:
@@ -87,25 +104,24 @@ The intended pipeline is:
 ```text
 source code and generated assets
         ↓
-compiler and shader/data generation
+optional shader/audio/data generation
         ↓
-assembly and object files
-        ↓
-linking
+MSVC compilation to x86 object files
         ↓
 Crinkler compression and linking
         ↓
 final executable and size report
 ```
 
-The actual setup for Visual Studio, NASM, shader minification, Crinkler, and any framework-specific generators will be documented separately once those tools are selected and configured. The future toolchain documentation should pin versions, define expected paths or environment variables, and provide debug/safe/compo build commands.
+PowerShell should expose stable commands for the Debug, Safe, and Compo variants. Coding agents and human developers should use those same commands; builds must not depend on IDE projects, IDE state, or manually configured editor tasks.
+
+The concrete installation and invocation details will be added to [toolchain.md](toolchain.md) as the build is implemented. Tool versions, discovery rules, expected paths, compiler flags, Crinkler options, and generated-file policy must be pinned there once validated.
 
 ## Open decisions
 
 - Which audio backend and composition workflow to use.
 - Which graphics API and minimal framework to use.
 - Whether audio playback should use DirectSound or another Windows API.
-- Which compiler/build system should drive the repeatable builds.
 - Which Crinkler version and options should define the compo build.
 - Which party's rules and compo machine should be the compatibility baseline.
 - Which generated files belong in source control and which should be rebuilt.
