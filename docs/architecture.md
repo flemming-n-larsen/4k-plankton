@@ -186,6 +186,28 @@ Three decisions are worth recording:
   box would instead put a minimum-image test inside the O(n^2) loop, costing
   both bytes and time in the hottest code, and it pops at the box faces.
 
+### Background and palette
+
+A third program (`background.vert.glsl` / `background.frag.glsl`) draws an
+oversized fullscreen triangle before the points, giving an underwater setting:
+a vertical gradient from deep navy to lit teal, a moving caustic ridge pattern,
+and god rays converging on a sun point above the top edge, all built from a
+handful of `sin`/`atan` terms in normalized `[0,1]` screen space rather than
+any texture or 3D geometry - this costs about 280 bytes for the whole effect.
+Blending is disabled while it draws, since it covers every pixel of the
+viewport and would otherwise accumulate additively over whatever was left in
+the back buffer from a previous frame; blending is re-enabled for the points
+drawn on top. This also removes the need for `glClear` - the background
+already overwrites every pixel.
+
+The particle palette is a cosine gradient (`a + b*cos(2*pi*(c*x+d))`) chosen to
+stay in the teal/cyan/blue/violet range, with the red channel's amplitude kept
+small so no phase of the 6 types swings into a warm hue - a first attempt with
+a larger red amplitude produced one type that read as brown, found by
+computing all 6 discrete outputs by hand rather than only eyeballing renders.
+Particles further from the camera are also pulled toward a dark blue-black,
+mimicking how real water absorbs colour with depth.
+
 ### Debug-only tooling
 
 The Debug build carries diagnostics that the Compo path compiles out entirely.

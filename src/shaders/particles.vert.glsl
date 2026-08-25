@@ -35,7 +35,15 @@ void main() {
     // screen with one sprite.
     gl_PointSize = clamp(.022 * focal * r.y / view.z, 1., 18.);
 
-    // The 6. matches TYPES in particles.comp.glsl.
-    tint = .5 + .5 * cos(6.2831 * (particle.w / 6. + vec3(0., .33, .67)));
+    // Cosine palette (Quilez form: a + b*cos(2pi(c*x+d))) tuned to stay in the
+    // teal/cyan/blue/green range: the red channel's amplitude is kept small so no
+    // phase swings into warm hues. The 6. matches TYPES in particles.comp.glsl.
+    float hue = particle.w / 6.;
+    tint = vec3(.15, .45, .55) + vec3(.10, .35, .35) * cos(6.2831 * (vec3(.3, .5, .5) * hue + vec3(.1, .2, .35)));
+
+    // Light absorption with distance: far particles pull toward deep-water blue,
+    // the way colour drops out of real water with depth.
+    tint = mix(tint, vec3(.02, .08, .15), clamp((view.z - 1.) / 2.5, 0., 1.) * .5);
+
     fade = exp(-.55 * (view.z - 2.));
 }

@@ -79,6 +79,8 @@ $shaders = @(
     @{ file = 'particles.comp.glsl'; symbol = 'particles_compute_shader' }
     @{ file = 'particles.vert.glsl'; symbol = 'particles_vertex_shader' }
     @{ file = 'particles.frag.glsl'; symbol = 'particles_fragment_shader' }
+    @{ file = 'background.vert.glsl'; symbol = 'background_vertex_shader' }
+    @{ file = 'background.frag.glsl'; symbol = 'background_fragment_shader' }
 )
 function Invoke-ShaderGeneration([string]$Configuration, [string]$OutputDirectory, $Toolchain) {
     $shaderDirectory = Join-Path $OutputDirectory 'generated'

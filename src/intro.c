@@ -207,8 +207,8 @@ static void LinkProgram(GLuint program) {
 static int Run(void) {
     WNDCLASSA window_class = {0}; PIXELFORMATDESCRIPTOR pixel_format = {0}; MSG message;
     HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
-    GLuint simulation, rendering, buffer;
-    GLint delta_location, time_location, resolution_location;
+    GLuint simulation, rendering, background, buffer;
+    GLint delta_location, time_location, resolution_location, background_time_location, background_resolution_location;
     RECT client; int width; int height; DWORD start_ticks; float previous; float now; float delta;
 #ifdef DEBUG
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
@@ -249,9 +249,15 @@ static int Run(void) {
     AttachShader(rendering, GL_VERTEX_SHADER, particles_vertex_shader);
     AttachShader(rendering, GL_FRAGMENT_SHADER, particles_fragment_shader);
     LinkProgram(rendering);
+    background = glCreateProgram_();
+    AttachShader(background, GL_VERTEX_SHADER, background_vertex_shader);
+    AttachShader(background, GL_FRAGMENT_SHADER, background_fragment_shader);
+    LinkProgram(background);
     delta_location = glGetUniformLocation_(simulation, "d");
     time_location = glGetUniformLocation_(rendering, "t");
     resolution_location = glGetUniformLocation_(rendering, "r");
+    background_time_location = glGetUniformLocation_(background, "t");
+    background_resolution_location = glGetUniformLocation_(background, "r");
 
     glGenBuffers_(1, &buffer);
     glBindBuffer_(GL_SHADER_STORAGE_BUFFER, buffer);
@@ -299,7 +305,21 @@ static int Run(void) {
 
         GetClientRect(window, &client); width = client.right - client.left; height = client.bottom - client.top;
         glViewport(0, 0, width, height);
-        glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+
+        // The background triangle covers every pixel of the viewport, so no
+        // glClear is needed; blending is off here (opaque replace) and back on
+        // for the additive point sprites drawn over it.
+        glDisable(GL_BLEND);
+        glUseProgram_(background);
+        glUniform1f_(background_time_location, now);
+        glUniform2f_(background_resolution_location, (float)width, (float)height);
+        glBegin(GL_TRIANGLES);
+        glVertex2f(-1, -1);
+        glVertex2f(3, -1);
+        glVertex2f(-1, 3);
+        glEnd();
+        glEnable(GL_BLEND);
+
         glUseProgram_(rendering);
         glUniform1f_(time_location, now);
         glUniform2f_(resolution_location, (float)width, (float)height);
