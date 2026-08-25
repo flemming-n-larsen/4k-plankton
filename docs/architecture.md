@@ -99,7 +99,7 @@ The compo build must not be treated as the only artifact. A safe build is useful
 
 ## Bootstrap milestone
 
-The first runnable milestone is intentionally small: a CRT-free Win32/x86 executable that creates an OpenGL 2.1 context and renders a rotating triangle from a time-based shader. GLSL source is kept readable under `src/shaders/` for Debug and minified into generated C strings for Compo. It has no audio, external graphics framework, or runtime dependency beyond the Windows system libraries and OpenGL driver.
+The first runnable milestone is intentionally small: a CRT-free Win32/x86 executable that creates an OpenGL 2.1 context and renders a rotating, RGB-interpolated triangle from a time- and resolution-aware shader. GLSL source is kept readable under `src/shaders/` for Debug and minified into generated C strings for Compo. Debug builds report shader compile/link failures through the debugger, while the Compo path omits those diagnostics. It has no audio, external graphics framework, or runtime dependency beyond the Windows system libraries and OpenGL driver.
 
 **Debug** runs the rectangle in a normal window. **Compo** runs it in a borderless primary-monitor window, links it with Crinkler, and fails the build if the final executable exceeds 4096 bytes. The planned **Safe** variant begins after this path is validated.
 
