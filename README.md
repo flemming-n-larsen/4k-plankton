@@ -58,6 +58,7 @@ The [in4k knowledge base](https://in4k.github.io/) is a good introduction to the
 - [MSVC command-line documentation](https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line) — compiler environment and direct command-line build guidance.
 - [Crinkler](https://github.com/runestubbe/Crinkler) — a compressing linker for small Windows demoscene executables. It is used to link the intro and compact the resulting executable.
 - [Crinkler manual](https://github.com/runestubbe/Crinkler/blob/master/doc/manual.txt) — usage instructions, linker options, and compression details.
+- [Shader Minifier](https://github.com/laurentlb/shader-minifier) — minifies GLSL shader source for the Compo build while keeping readable shader source for development.
 - [in4k Crinkler notes](https://in4k.github.io/wiki/crinkler) — background on the compression and linking techniques used by Crinkler.
 - [Sointu](https://github.com/vsariola/sointu) — a modern, cross-platform 4klang-derived synthesizer candidate that can compile x86 music code to assembly.
 - [Oidos](https://github.com/askeksa/Oidos) — an additive synthesizer for very small executables, with a Renoise-based workflow.

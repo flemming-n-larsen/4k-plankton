@@ -13,7 +13,7 @@ The project starts from the newest stable versions available on 24 August 2026. 
 | Windows 11 SDK | release 10.0.28000.2705; toolchain directory 10.0.28000.0 |
 | PowerShell | 7.6.5 |
 | Crinkler | 3.0b |
-| Shader Minifier | 1.6.0 (deferred until shader processing is needed) |
+| Shader Minifier | 1.6.0 |
 
 Install the Build Tools C++ workload and its x64/x86 compiler component, plus the listed Windows SDK. Extract the Crinkler 3.0b release archive under `.tools/crinkler/3.0b/`; `.tools` is deliberately ignored by Git. Run `./build.ps1 -VerifyTools` before building.
 
@@ -28,7 +28,7 @@ When upgrading a tool, build and run the current Debug and Compo artifacts first
 | Standalone Microsoft C++ Build Tools | Provide the MSVC compiler (`cl.exe`) targeting Win32/x86 | Yes |
 | Windows SDK | Provide Windows headers and import libraries | Yes |
 | PowerShell | Drive reproducible build variants and tool discovery | Yes |
-| Shader Minifier | Minify release shaders | Yes once shaders are present |
+| Shader Minifier | Minify release shaders | Yes |
 | Crinkler | Link object files, compress the executable, and report final size | Yes |
 | NASM | Assemble generated or hand-written assembly | Only if the selected implementation needs it |
 | Audio tools such as Sointu | Compose or generate procedural music code and data | Only after an audio backend is selected |

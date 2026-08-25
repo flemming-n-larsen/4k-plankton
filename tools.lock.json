@@ -28,6 +28,12 @@
       "sha256": "86E4D861105DE24A9F599A5E7319E45D052C0DC2413BBE7A08FBD71AB5FB49D8",
       "source": "https://github.com/runestubbe/Crinkler/releases/tag/v3.0b"
     },
-    "shaderMinifier": { "version": "1.6.0", "required": false, "source": "https://github.com/laurentlb/shader-minifier/releases/tag/1.6.0" }
+    "shaderMinifier": {
+      "version": "1.6.0",
+      "required": true,
+      "relativePath": ".tools/shader-minifier/1.6.0/shader_minifier.exe",
+      "sha256": "054A27326C419A6727FA0AFCFD746656FFAFB6B87FD2776F252130A271C58C2A",
+      "source": "https://github.com/laurentlb/shader-minifier/releases/tag/1.6.0"
+    }
   }
 }

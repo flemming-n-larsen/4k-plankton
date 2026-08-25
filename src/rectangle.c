@@ -17,6 +17,8 @@ typedef void (APIENTRYP PFNGLUSEPROGRAMPROC)(GLuint program);
 #define GL_VERTEX_SHADER 0x8B31
 #define GL_FRAGMENT_SHADER 0x8B30
 
+#include "shaders.h"
+
 int _fltused = 0;
 
 static PFNGLCREATESHADERPROC glCreateShader_;
@@ -51,8 +53,8 @@ static int LoadOpenGl21(void) {
 }
 
 static GLuint BuildProgram(void) {
-    const char* vertex_source = "uniform float t;varying vec4 c;void main(){float o=cos(t),s=sin(t);gl_Position=vec4(o*gl_Vertex.x-s*gl_Vertex.y,s*gl_Vertex.x+o*gl_Vertex.y,0.,1.);c=gl_Color;}";
-    const char* fragment_source = "varying vec4 c;void main(){gl_FragColor=c;}";
+    const char* vertex_source = triangle_vertex_shader;
+    const char* fragment_source = triangle_fragment_shader;
     GLuint vertex = glCreateShader_(GL_VERTEX_SHADER);
     GLuint fragment = glCreateShader_(GL_FRAGMENT_SHADER);
     GLuint program = glCreateProgram_();
