@@ -110,21 +110,33 @@ The abstractions are primarily development boundaries. The final compo build may
 
 ## Audio direction
 
-The project should support runtime-generated audio instead of embedding a WAV, MP3, or other complete music file in the final executable. This keeps the music within the same procedural, size-constrained model as the visuals.
+The project supports runtime-generated audio instead of embedding a WAV, MP3, or other complete sound file in the final executable. This keeps sound within the same procedural, size-constrained, explicitly-seeded model as the visuals.
 
-The audio boundary should allow the rest of the intro to remain independent of the eventual synthesis and playback implementation. It should provide room for:
+### Ocean ambience
 
-- starting and stopping the music;
-- obtaining a stable music position for synchronizing visuals;
-- development playback and inspection;
-- replacing the final backend without redesigning the intro loop.
+The first audio milestone is a synthesized ocean ambience, matching the underwater visuals rather than a musical score. It lives in its own translation unit, `src/audio.c` / `src/audio.h`, keeping the audio subsystem's boundary with platform and graphics code visible in the source layout rather than only in comments.
 
-No audio solution is selected yet. Current candidates are:
+`AudioStart()` synthesizes a loopable buffer once at startup and plays it through `PlaySoundA` with `SND_LOOP`, and `AudioStop()` stops it. `mmsystem.h` is excluded by `WIN32_LEAN_AND_MEAN`, so `PlaySoundA` is declared by hand rather than pulling in that header, matching the rest of the codebase's style. This satisfies the starting/stopping and swappable-backend parts of the audio boundary below; a stable playback position for visual sync is not implemented, since nothing in the intro currently needs to react to the audio.
+
+The synthesis itself is a small DSP loop, not a sample or a tracker song:
+
+- A one-pole low-pass filter on white noise gives a "surf" body; a one-sample difference (a crude high-pass) gives a "foam" layer that fades in only near loudness peaks.
+- The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation), rather than a periodic wave or a single low-pass filter of noise. The latter was tried first and did not work: slowing a one-pole filter enough to change over seconds also crushes its variance toward zero, since for that filter bandwidth and amplitude shrink together. Waypoint interpolation decouples the two, giving slow, full-range swells.
+- The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp - an early version hard-clipped during loud swells, which is audibly harsh; the smooth curve rounds off peaks instead.
+- The loop's tail is crossfaded into its head before use, so playback has no click at the wrap.
+- Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
+
+None of this needs the CRT: the PRNG and filters are pure integer/float arithmetic, and every float-to-integer conversion casts through a signed `int` rather than `unsigned` - a direct float-to-unsigned cast pulls in a CRT helper that `/NODEFAULTLIB` has no library for, which surfaced once already in this project as an `LNK1120`.
+
+### Open audio questions
+
+Music, if the intro grows one, is a separate decision from this ambience layer and remains open. Candidates:
 
 - [Sointu](https://github.com/vsariola/sointu), a 4klang-derived synthesizer with x86 output and a song-to-assembly compiler;
 - [4klang](https://github.com/gopher-atz/4klang), the established VSTi and assembly-based workflow;
 - [Oidos](https://github.com/askeksa/Oidos), an additive synthesizer with a Renoise-based conversion workflow;
-- shader-based audio, where music is generated procedurally alongside the visual shader.
+- shader-based audio, where music is generated procedurally alongside the visual shader;
+- extending the current hand-written synthesis approach with a simple sequencer.
 
 The eventual decision should be based on the compressed size of the complete intro, sound quality, CPU/GPU cost, synchronization quality, development workflow, and toolchain reproducibility.
 
@@ -155,10 +167,12 @@ The compo build must not be treated as the only artifact. A safe build is useful
 ## Bootstrap milestone
 
 The bootstrap milestone is a CRT-free Win32/x86 executable running a 3D
-[Particle Life](https://particle-life.com/) simulation on the GPU. GLSL source
-is kept readable under `src/shaders/` for Debug and minified into generated C
-strings for Compo. It has no audio, external graphics framework, or runtime
-dependency beyond the Windows system libraries and OpenGL driver.
+[Particle Life](https://particle-life.com/) simulation on the GPU, with a
+synthesized ocean ambience (see Audio direction below). GLSL source is kept
+readable under `src/shaders/` for Debug and minified into generated C strings
+for Compo. It has no external graphics framework or runtime dependency beyond
+the Windows system libraries, the OpenGL driver, and `winmm.dll` for audio
+playback.
 
 **Debug** runs in a normal window and reports shader compile and link failures.
 **Compo** runs in a borderless primary-monitor window, links with Crinkler, and

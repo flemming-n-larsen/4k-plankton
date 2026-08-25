@@ -25,6 +25,7 @@ typedef int GLsizeiptr;
 #define GL_POINT_SPRITE 0x8861
 
 #include "shaders.h"
+#include "audio.h"
 
 int _fltused = 0;
 
@@ -272,6 +273,7 @@ static int Run(void) {
 #ifdef DEBUG
     if (steps < 1) steps = 1;
 #endif
+    AudioStart();
     glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_POINT_SPRITE);
     // Subtract ticks as integers before converting: GetTickCount grows to
     // billions on a long-running machine, where float32 can no longer resolve a
@@ -332,6 +334,7 @@ static int Run(void) {
         SwapBuffers(device_context);
     }
 done:
+    AudioStop();
     wglMakeCurrent(0, 0); wglDeleteContext(render_context); ReleaseDC(window, device_context); return 0;
 }
 

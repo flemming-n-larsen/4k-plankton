@@ -67,8 +67,14 @@ function Get-Toolchain([bool]$RequireCrinkler) {
     [ordered]@{ buildTools = $installation.catalog.productDisplayVersion; buildToolsInstallationVersion = $installation.installationVersion; msvc = $msvcVersion; compilerFileVersion = $compilerVersion; windowsSdkRelease = $toolLock.tools.windowsSdk.release; windowsSdkToolchain = $sdkVersion; powerShell = $PSVersionTable.PSVersion.ToString(); crinkler = if ($RequireCrinkler) { $crinkler } else { $null }; shaderMinifier = if ($RequireCrinkler) { $shaderMinifier } else { $null } }
 }
 function Invoke-Native([string]$FilePath, [string[]]$Arguments) {
-    Write-Host "> $FilePath $($Arguments -join ' ')"; & $FilePath @Arguments
+    Write-Host "> $FilePath $($Arguments -join ' ')"
+    $output = & $FilePath @Arguments
     if ($LASTEXITCODE -ne 0) { Fail "Command failed with exit code ${LASTEXITCODE}: $FilePath" }
+    # Echoed explicitly rather than left to flow through: cl.exe writes each
+    # source filename to stdout even under /nologo, which would otherwise leak
+    # into any pipeline a caller builds around this function (as it did when
+    # $objects collected an /nologo-invisible "intro.c" alongside its object path).
+    if ($output) { $output | ForEach-Object { Write-Host $_ } }
 }
 function Write-ToolchainReport($Toolchain, [string]$OutputDirectory) { $Toolchain | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $OutputDirectory 'toolchain.json') }
 function ConvertTo-CString([string]$Text) {
@@ -109,16 +115,21 @@ if ($VerifyTools) { $toolchain | ConvertTo-Json; if (!$PSBoundParameters.Contain
 $outputDirectory = Join-Path $repoRoot (Join-Path 'out' $Configuration); $objectDirectory = Join-Path $outputDirectory 'obj'
 New-Item -ItemType Directory -Force -Path $objectDirectory | Out-Null
 $generatedDirectory = Invoke-ShaderGeneration $Configuration $outputDirectory $toolchain
-$source = Join-Path $repoRoot 'src\intro.c'; $object = Join-Path $objectDirectory 'intro.obj'; $executable = Join-Path $outputDirectory 'in4k-particles.exe'
-$compileArguments = @('/nologo', '/c', '/TC', '/Zl', '/GS-', '/W4', "/I$generatedDirectory", "/Fo$object", $source)
-if ($Configuration -eq 'Debug') { $compileArguments += @('/Od', '/Z7', '/DDEBUG') } else { $compileArguments += @('/O1', '/Os', '/DWIN32', '/DCOMPO') }
-Invoke-Native 'cl.exe' $compileArguments
-$libraries = @('user32.lib', 'gdi32.lib', 'opengl32.lib', 'kernel32.lib')
+$sourceFiles = @('intro.c', 'audio.c'); $executable = Join-Path $outputDirectory 'in4k-particles.exe'
+$objects = foreach ($sourceFile in $sourceFiles) {
+    $source = Join-Path $repoRoot (Join-Path 'src' $sourceFile)
+    $object = Join-Path $objectDirectory ($sourceFile -replace '\.c$', '.obj')
+    $compileArguments = @('/nologo', '/c', '/TC', '/Zl', '/GS-', '/W4', "/I$generatedDirectory", "/Fo$object", $source)
+    if ($Configuration -eq 'Debug') { $compileArguments += @('/Od', '/Z7', '/DDEBUG') } else { $compileArguments += @('/O1', '/Os', '/DWIN32', '/DCOMPO') }
+    Invoke-Native 'cl.exe' $compileArguments
+    $object
+}
+$libraries = @('user32.lib', 'gdi32.lib', 'opengl32.lib', 'winmm.lib', 'kernel32.lib')
 if ($Configuration -eq 'Debug') {
-    Invoke-Native 'link.exe' (@('/nologo', '/subsystem:windows', '/entry:WinMainCRTStartup', '/nodefaultlib', "/out:$executable", $object) + $libraries)
+    Invoke-Native 'link.exe' (@('/nologo', '/subsystem:windows', '/entry:WinMainCRTStartup', '/nodefaultlib', "/out:$executable") + $objects + $libraries)
 } else {
     $report = Join-Path $outputDirectory 'crinkler-report.html'
-    Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', "/OUT:$executable", "/REPORT:$report", $object) + $libraries)
+    Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', "/OUT:$executable", "/REPORT:$report") + $objects + $libraries)
     $bytes = (Get-Item -LiteralPath $executable).Length
     [ordered]@{ executable = 'in4k-particles.exe'; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
     Write-Host "Compo size: $bytes / 4096 bytes"; if ($bytes -gt 4096) { Fail "Compo executable exceeds the 4096-byte limit by $($bytes - 4096) bytes." }
