@@ -75,25 +75,27 @@ function ConvertTo-CString([string]$Text) {
     $lines = ($Text -replace "`r`n", "`n" -replace "`r", "`n") -split "`n"
     (($lines | ForEach-Object { '"' + $_.Replace('\', '\\').Replace('"', '\"') + '\n"' }) -join [Environment]::NewLine)
 }
+$shaders = @(
+    @{ file = 'particles.comp.glsl'; symbol = 'particles_compute_shader' }
+    @{ file = 'particles.vert.glsl'; symbol = 'particles_vertex_shader' }
+    @{ file = 'particles.frag.glsl'; symbol = 'particles_fragment_shader' }
+)
 function Invoke-ShaderGeneration([string]$Configuration, [string]$OutputDirectory, $Toolchain) {
     $shaderDirectory = Join-Path $OutputDirectory 'generated'
     New-Item -ItemType Directory -Force -Path $shaderDirectory | Out-Null
-    $vertexSource = Join-Path $repoRoot 'src\shaders\triangle.vert.glsl'
-    $fragmentSource = Join-Path $repoRoot 'src\shaders\triangle.frag.glsl'
-    $vertexInput = $vertexSource; $fragmentInput = $fragmentSource
-    if ($Configuration -eq 'Compo') {
-        $vertexInput = Join-Path $shaderDirectory 'triangle.vert.glsl'
-        $fragmentInput = Join-Path $shaderDirectory 'triangle.frag.glsl'
-        Invoke-Native $Toolchain.shaderMinifier @('--format', 'text', '--preserve-externals', '-o', $vertexInput, $vertexSource)
-        Invoke-Native $Toolchain.shaderMinifier @('--format', 'text', '--preserve-externals', '-o', $fragmentInput, $fragmentSource)
+    $declarations = foreach ($shader in $shaders) {
+        $source = Join-Path $repoRoot (Join-Path 'src\shaders' $shader.file)
+        $shaderInput = $source
+        if ($Configuration -eq 'Compo') {
+            $shaderInput = Join-Path $shaderDirectory $shader.file
+            Invoke-Native $Toolchain.shaderMinifier @('--format', 'text', '--preserve-externals', '-o', $shaderInput, $source)
+        }
+        "static const char* $($shader.symbol) =`r`n$(ConvertTo-CString (Get-Content -Raw $shaderInput));"
     }
     $header = @"
 #ifndef IN4K_SHADERS_H
 #define IN4K_SHADERS_H
-static const char* triangle_vertex_shader =
-$(ConvertTo-CString (Get-Content -Raw $vertexInput));
-static const char* triangle_fragment_shader =
-$(ConvertTo-CString (Get-Content -Raw $fragmentInput));
+$($declarations -join [Environment]::NewLine)
 #endif
 "@
     Set-Content -Encoding utf8 (Join-Path $shaderDirectory 'shaders.h') $header
@@ -105,7 +107,7 @@ if ($VerifyTools) { $toolchain | ConvertTo-Json; if (!$PSBoundParameters.Contain
 $outputDirectory = Join-Path $repoRoot (Join-Path 'out' $Configuration); $objectDirectory = Join-Path $outputDirectory 'obj'
 New-Item -ItemType Directory -Force -Path $objectDirectory | Out-Null
 $generatedDirectory = Invoke-ShaderGeneration $Configuration $outputDirectory $toolchain
-$source = Join-Path $repoRoot 'src\rectangle.c'; $object = Join-Path $objectDirectory 'rectangle.obj'; $executable = Join-Path $outputDirectory 'in4k-rectangle.exe'
+$source = Join-Path $repoRoot 'src\intro.c'; $object = Join-Path $objectDirectory 'intro.obj'; $executable = Join-Path $outputDirectory 'in4k-particles.exe'
 $compileArguments = @('/nologo', '/c', '/TC', '/Zl', '/GS-', '/W4', "/I$generatedDirectory", "/Fo$object", $source)
 if ($Configuration -eq 'Debug') { $compileArguments += @('/Od', '/Z7', '/DDEBUG') } else { $compileArguments += @('/O1', '/Os', '/DWIN32', '/DCOMPO') }
 Invoke-Native 'cl.exe' $compileArguments
@@ -116,7 +118,7 @@ if ($Configuration -eq 'Debug') {
     $report = Join-Path $outputDirectory 'crinkler-report.html'
     Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', "/OUT:$executable", "/REPORT:$report", $object) + $libraries)
     $bytes = (Get-Item -LiteralPath $executable).Length
-    [ordered]@{ executable = 'in4k-rectangle.exe'; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
+    [ordered]@{ executable = 'in4k-particles.exe'; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
     Write-Host "Compo size: $bytes / 4096 bytes"; if ($bytes -gt 4096) { Fail "Compo executable exceeds the 4096-byte limit by $($bytes - 4096) bytes." }
 }
 Write-ToolchainReport $toolchain $outputDirectory; Write-Host "Built $executable"

@@ -18,7 +18,54 @@ References:
 
 - [in4k: Win32 as a 4 KiB platform](https://in4k.github.io/wiki/win32)
 - [Crinkler](https://github.com/runestubbe/Crinkler)
-- [Revision 2026 PC competition rules](https://2026.revision-party.net/competitions/pc/)
+- [TRSAC realtime compo rules](https://trsac.dk/realtime-compos/#compo4)
+
+## Compatibility baseline: TRSAC, Compo PC 1
+
+The target competition is the TRSAC 4 KB intro compo, and Compo PC 1 is the
+compatibility baseline:
+
+| | |
+|---|---|
+| Size limit | 4 KB, one `.exe` file |
+| Compo PC 1 | Ryzen 9950X3D, GeForce RTX 5070 Ti, 32 GB, Windows with latest NVIDIA drivers |
+| Compo PC 2 | i7-11700, GeForce RTX 3070, 32 GB, Windows with latest NVIDIA drivers |
+| Resolution | Must support both 1920x1080 and 1280x720 |
+| Runtime | 5 minutes maximum |
+| Submission | Entry must include an information file |
+
+Two rules constrain the code rather than the packaging. The intro must render
+correctly at both required resolutions, so every screen-space quantity is
+derived from the viewport rather than from pixel constants. And because both
+compo machines must show the same thing, the simulation is advanced by measured
+wall-clock time rather than per frame, so it evolves at the same rate
+regardless of frame rate.
+
+## Graphics API decision
+
+The intro uses **OpenGL 4.3+ compute shaders with shader storage buffers**,
+reached through a plain `wglCreateContext`.
+
+On Windows that call already returns the driver's maximum compatibility
+profile - 4.6 on the compo machines - so `glDispatchCompute`, SSBOs, and the
+rest resolve through `wglGetProcAddress` with no `wglCreateContextAttribsARB`
+path and no extra bytes. Both compo machines are recent NVIDIA cards under
+current drivers, so there is no compatibility argument for the older
+alternative of ping-ponging state through float textures, which would cost FBO
+setup, format juggling, and an awkward data layout while running slower.
+
+The compatibility profile also allows drawing `GL_POINTS` with no vertex array
+object and no vertex buffer, reading positions straight from the SSBO by
+`gl_VertexID`. That is the single largest size saving in the renderer.
+
+One consequence is easy to miss: in a compatibility profile `gl_PointCoord` is
+undefined unless `GL_POINT_SPRITE` is enabled. Without it the value reads as
+zero, every fragment fails the sprite falloff test, and the screen stays black
+with no GL error reported.
+
+WebGPU and WebGL were considered and do not apply - both are browser APIs, and
+this is a native Win32 executable. For a browser entry WebGPU would be the
+right choice for the same reason compute shaders are here.
 
 ## Toolchain decision
 
@@ -99,9 +146,55 @@ The compo build must not be treated as the only artifact. A safe build is useful
 
 ## Bootstrap milestone
 
-The first runnable milestone is intentionally small: a CRT-free Win32/x86 executable that creates an OpenGL 2.1 context and ray-marches a lit sphere through a fullscreen coverage triangle. GLSL source is kept readable under `src/shaders/` for Debug and minified into generated C strings for Compo. Debug builds report shader compile/link failures through the debugger, while the Compo path omits those diagnostics. It has no audio, external graphics framework, or runtime dependency beyond the Windows system libraries and OpenGL driver.
+The bootstrap milestone is a CRT-free Win32/x86 executable running a 3D
+[Particle Life](https://particle-life.com/) simulation on the GPU. GLSL source
+is kept readable under `src/shaders/` for Debug and minified into generated C
+strings for Compo. It has no audio, external graphics framework, or runtime
+dependency beyond the Windows system libraries and OpenGL driver.
 
-**Debug** runs the rectangle in a normal window. **Compo** runs it in a borderless primary-monitor window, links it with Crinkler, and fails the build if the final executable exceeds 4096 bytes. The planned **Safe** variant begins after this path is validated.
+**Debug** runs in a normal window and reports shader compile and link failures.
+**Compo** runs in a borderless primary-monitor window, links with Crinkler, and
+fails the build if the executable exceeds 4096 bytes. The planned **Safe**
+variant begins after this path is validated.
+
+### Simulation and rendering
+
+16384 particles of 6 types are held in a single shader storage buffer of
+`{ vec4 position, vec4 velocity }`, where `position.w` carries the type index.
+Every frame a compute shader applies the standard Particle Life force curve over
+all pairs, and points are drawn straight from that buffer.
+
+Three decisions are worth recording:
+
+- **No data is embedded.** The attraction matrix and the initial positions are
+  generated from a hash inside the shader, costing zero bytes. `SEED` in
+  `particles.comp.glsl` selects a different but fully reproducible attractor;
+  nothing in the intro is seeded from the clock, so every run is identical.
+- **A type always attracts itself.** With a purely random matrix, 3D Particle
+  Life settles into a uniform gas: there is too much room for cohesion to win.
+  Biasing the diagonal positive is what makes distinct cells form.
+- **The world does not wrap.** Particles are held by a soft central containment
+  force applied once per particle, outside the pair loop. The classic periodic
+  box would instead put a minimum-image test inside the O(n^2) loop, costing
+  both bytes and time in the hottest code, and it pops at the box faces.
+
+### Debug-only tooling
+
+The Debug build carries diagnostics that the Compo path compiles out entirely.
+Shader logs and the GL version go to both the debugger and `in4k.log`. Three
+command-line options make the output verifiable without a debugger or a screen
+grab, by reading the back buffer in-process and writing `shot.bmp`:
+
+- `-shot<frames>` runs a fixed 60 Hz timestep and captures at that exact frame,
+  which makes a frame reproducible;
+- `-live<seconds>` uses the real wall-clock timing path and captures after that
+  many seconds;
+- `-width<w> -height<h>` sizes the client area exactly, so the two required
+  compo resolutions can be compared without changing display mode.
+
+Capturing from the screen instead is unreliable: a fullscreen window that has
+lost foreground returns a stale frame, which is easily mistaken for a frozen
+simulation.
 
 ## Planned build pipeline
 
@@ -126,8 +219,8 @@ The concrete installation and invocation details will be added to [toolchain.md]
 ## Open decisions
 
 - Which audio backend and composition workflow to use.
-- Which graphics API and minimal framework to use.
 - Whether audio playback should use DirectSound or another Windows API.
 - Which Crinkler version and options should define the compo build.
-- Which party's rules and compo machine should be the compatibility baseline.
+- Whether the compo organizers want the desktop display mode honoured or an
+  explicit mode set for the required resolutions.
 - Which generated files belong in source control and which should be rebuilt.

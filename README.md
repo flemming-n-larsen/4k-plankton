@@ -10,7 +10,7 @@ The current implementation direction is a native Win32/x86 intro built through a
 
 The project uses a headless command-line toolchain. It does not require Visual Studio or Visual Studio Code. Compilation uses the standalone Microsoft C++ Build Tools and Windows SDK, driven directly by PowerShell scripts, with Crinkler performing the final linking and executable compression. CMake is not part of the initial baseline.
 
-The first implementation milestone is a CRT-free Win32/x86 OpenGL fullscreen-triangle shader with no audio. Its Compo build must be Crinkler-compressed to 4,096 bytes or less. Exact versions and integrity checks are defined in [tools.lock.json](tools.lock.json); see [docs/toolchain.md](docs/toolchain.md) for installation and version-update rules.
+The first implementation milestone is a CRT-free Win32/x86 executable running a 3D [Particle Life](https://particle-life.com/) simulation with no audio: 16,384 particles of 6 types are stepped by an OpenGL compute shader and drawn as additive point sprites, with the attraction matrix and starting positions generated procedurally in the shader so no data is embedded. It targets the [TRSAC](https://trsac.dk/realtime-compos/#compo4) 4 KB compo. Its Compo build must be Crinkler-compressed to 4,096 bytes or less. Exact versions and integrity checks are defined in [tools.lock.json](tools.lock.json); see [docs/toolchain.md](docs/toolchain.md) for installation and version-update rules.
 
 Audio will be generated at runtime rather than embedded as a music file. The intro will use an audio abstraction so the synthesis and playback implementation can be selected later without coupling the rest of the intro to one audio solution. Candidate approaches include [Sointu](https://github.com/vsariola/sointu), [4klang](https://github.com/gopher-atz/4klang), [Oidos](https://github.com/askeksa/Oidos), and shader-based audio.
 
@@ -30,7 +30,7 @@ Build and run the windowed Debug version:
 
 ```powershell
 .\build.ps1 -Configuration Debug
-.\out\Debug\in4k-rectangle.exe
+.\out\Debug\in4k-particles.exe
 ```
 
 Or build and launch it directly:
@@ -43,10 +43,26 @@ Build and run the Crinkler-compressed Compo version:
 
 ```powershell
 .\build.ps1 -Configuration Compo
-.\out\Compo\in4k-rectangle.exe
+.\out\Compo\in4k-particles.exe
 ```
 
 The Compo build opens a borderless primary-monitor window and fails if the executable exceeds 4,096 bytes. Use `-Run` to launch it immediately. Build outputs, including the executable, Crinkler report, size report, and toolchain report, are written under `out\` and ignored by Git.
+
+Press Escape to exit either build.
+
+## Inspecting a Debug run
+
+The Debug build writes shader and OpenGL diagnostics to `in4k.log` as well as to the debugger, and accepts options that capture a frame to `shot.bmp` directly from the back buffer:
+
+```powershell
+.\out\Debug\in4k-particles.exe -shot900                       # fixed 60 Hz step, capture at frame 900
+.\out\Debug\in4k-particles.exe -live20                        # real timing, capture after 20 seconds
+.\out\Debug\in4k-particles.exe -shot900 -width1280 -height720 # exact client size
+```
+
+`-shot` is reproducible, which makes it the right option for comparing a change; `-live` exercises the real wall-clock timing path that `-shot` bypasses. `-width`/`-height` check the two resolutions TRSAC requires without changing display mode. These options are compiled out of the Compo build.
+
+To try a different attractor, change `SEED` in `src/shaders/particles.comp.glsl`. Nothing is seeded from the clock, so a given seed always produces the same run.
 
 ## Introduction to the in4k scene
 
