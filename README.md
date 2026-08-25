@@ -58,9 +58,12 @@ The Debug build writes shader and OpenGL diagnostics to `in4k.log` as well as to
 .\out\Debug\in4k-particles.exe -shot900                       # fixed 60 Hz step, capture at frame 900
 .\out\Debug\in4k-particles.exe -live20                        # real timing, capture after 20 seconds
 .\out\Debug\in4k-particles.exe -shot900 -width1280 -height720 # exact client size
+.\out\Debug\in4k-particles.exe -shot900 -steps20              # 5 simulated minutes in ~15s
 ```
 
-`-shot` is reproducible, which makes it the right option for comparing a change; `-live` exercises the real wall-clock timing path that `-shot` bypasses. `-width`/`-height` check the two resolutions TRSAC requires without changing display mode. These options are compiled out of the Compo build.
+`-shot` is reproducible, which makes it the right option for comparing a change; `-live` exercises the real wall-clock timing path that `-shot` bypasses. `-width`/`-height` check the two resolutions TRSAC requires without changing display mode. `-steps<k>` runs k simulation steps per rendered frame, which reaches a late state quickly when tuning and produces byte-identical output to running k times as many frames. These options are compiled out of the Compo build.
+
+The Compo build runs borderless fullscreen at the current desktop resolution, and is resolution-independent, so one executable covers both resolutions TRSAC requires.
 
 To try a different attractor, change `SEED` in `src/shaders/particles.comp.glsl`. Nothing is seeded from the clock, so a given seed always produces the same run.
 

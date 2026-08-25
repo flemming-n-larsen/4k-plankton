@@ -69,8 +69,15 @@ void main() {
 
     // Soft containment, applied once per particle rather than per pair: only
     // particles past .85 are pulled back, so the interior stays undisturbed.
+    // The pull is quadratic in the overshoot: gentle at the boundary, but stiff
+    // enough further out that a cell cannot drift away over the five minutes the
+    // intro may run. Raising the linear term instead does not work - it dims the
+    // whole cluster and still lets the outliers escape.
     float radius = length(self.xyz);
-    if (radius > .85) force -= self.xyz * (radius - .85) * 26. / radius;
+    if (radius > .85) {
+        float over = radius - .85;
+        force -= self.xyz * over * (26. + 60. * over) / radius;
+    }
 
     vec3 velocity = particles[i].velocity.xyz + force * d;
     particles[i].velocity = vec4(velocity * exp(-17. * d), 0.);

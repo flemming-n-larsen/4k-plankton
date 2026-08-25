@@ -41,6 +41,14 @@ compo machines must show the same thing, the simulation is advanced by measured
 wall-clock time rather than per frame, so it evolves at the same rate
 regardless of frame rate.
 
+The intro ships as **one executable that runs borderless fullscreen at the
+current desktop resolution**, rather than as separate per-resolution builds. It
+is resolution-independent, so the organizer sets the machine and the intro
+follows; 1920x1080 and 1280x720 have been confirmed to render identical
+framing and structure. This keeps the entry to the single exe file the rules
+describe, costs no bytes, and avoids the risk of a forced mode switch failing
+on the compo machine.
+
 ## Graphics API decision
 
 The intro uses **OpenGL 4.3+ compute shaders with shader storage buffers**,
@@ -190,7 +198,13 @@ grab, by reading the back buffer in-process and writing `shot.bmp`:
 - `-live<seconds>` uses the real wall-clock timing path and captures after that
   many seconds;
 - `-width<w> -height<h>` sizes the client area exactly, so the two required
-  compo resolutions can be compared without changing display mode.
+  compo resolutions can be compared without changing display mode;
+- `-steps<k>` runs k simulation steps per rendered frame. Rendering never feeds
+  back into the simulation, so this reaches a late state in a fraction of the
+  wall-clock time while producing byte-identical output - verified by comparing
+  `-shot1800 -steps1` against `-shot180 -steps10` and `-shot90 -steps20`. That
+  equivalence also demonstrates the simulation is deterministic, confirming the
+  split-pass integration is free of read/write races.
 
 Capturing from the screen instead is unreliable: a fullscreen window that has
 lost foreground returns a stale frame, which is easily mistaken for a frozen
@@ -221,6 +235,4 @@ The concrete installation and invocation details will be added to [toolchain.md]
 - Which audio backend and composition workflow to use.
 - Whether audio playback should use DirectSound or another Windows API.
 - Which Crinkler version and options should define the compo build.
-- Whether the compo organizers want the desktop display mode honoured or an
-  explicit mode set for the required resolutions.
 - Which generated files belong in source control and which should be rebuilt.

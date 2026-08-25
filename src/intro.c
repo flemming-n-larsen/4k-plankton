@@ -123,6 +123,10 @@ static void Report(const char* label, const char* text) {
 // "-live<seconds>" instead uses the real wall-clock timing path and captures
 // after that many seconds. Both read the back buffer in-process, so the capture
 // is unaffected by window focus or anything else on screen.
+// "-steps<k>" runs k simulation steps per rendered frame. Rendering does not
+// feed back into the simulation, so this produces exactly the same sequence of
+// states as running k times as many frames - it just reaches a late state in a
+// fraction of the wall-clock time when tuning.
 static int Option(const char* name, int fallback) {
     const char* text = GetCommandLineA();
     int length = lstrlenA(name), index;
@@ -209,6 +213,7 @@ static int Run(void) {
 #ifdef DEBUG
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
     int forced_width = Option("-width", 0), forced_height = Option("-height", 0);
+    int steps = Option("-steps", 1), step;
 #endif
     window_class.style = CS_OWNDC; window_class.lpfnWndProc = WindowProcedure;
     window_class.hInstance = GetModuleHandleA(0); window_class.lpszClassName = "in4k.particles";
@@ -258,6 +263,9 @@ static int Run(void) {
     glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
     glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
 
+#ifdef DEBUG
+    if (steps < 1) steps = 1;
+#endif
     glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_POINT_SPRITE);
     // Subtract ticks as integers before converting: GetTickCount grows to
     // billions on a long-running machine, where float32 can no longer resolve a
@@ -271,17 +279,23 @@ static int Run(void) {
         if (delta > 1.f / 30.f) delta = 1.f / 30.f;
         if (delta <= 0.f) delta = .001f;
 #ifdef DEBUG
-        if (shot_frames) { delta = 1.f / 60.f; now = (float)frame * delta; }
         frame++;
+        if (shot_frames) { delta = 1.f / 60.f; now = (float)frame * delta * (float)steps; }
 #endif
 
         glUseProgram_(simulation);
+#ifdef DEBUG
+        for (step = 0; step < steps; step++) {
+#endif
         glUniform1f_(delta_location, delta);
         glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
         glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
         glUniform1f_(delta_location, -delta);
         glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
         glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
+#ifdef DEBUG
+        }
+#endif
 
         GetClientRect(window, &client); width = client.right - client.left; height = client.bottom - client.top;
         glViewport(0, 0, width, height);
