@@ -26,6 +26,10 @@ static PFNGLCREATEPROGRAMPROC glCreateProgram_;
 static PFNGLATTACHSHADERPROC glAttachShader_;
 static PFNGLLINKPROGRAMPROC glLinkProgram_;
 static PFNGLUSEPROGRAMPROC glUseProgram_;
+typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar* name);
+typedef void (APIENTRYP PFNGLUNIFORM1FPROC)(GLint location, GLfloat value);
+static PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation_;
+static PFNGLUNIFORM1FPROC glUniform1f_;
 
 static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
     if (message == WM_CLOSE) { DestroyWindow(window); return 0; }
@@ -41,11 +45,13 @@ static int LoadOpenGl21(void) {
     glAttachShader_ = (PFNGLATTACHSHADERPROC)wglGetProcAddress("glAttachShader");
     glLinkProgram_ = (PFNGLLINKPROGRAMPROC)wglGetProcAddress("glLinkProgram");
     glUseProgram_ = (PFNGLUSEPROGRAMPROC)wglGetProcAddress("glUseProgram");
-    return glCreateShader_ && glShaderSource_ && glCompileShader_ && glCreateProgram_ && glAttachShader_ && glLinkProgram_ && glUseProgram_;
+    glGetUniformLocation_ = (PFNGLGETUNIFORMLOCATIONPROC)wglGetProcAddress("glGetUniformLocation");
+    glUniform1f_ = (PFNGLUNIFORM1FPROC)wglGetProcAddress("glUniform1f");
+    return glCreateShader_ && glShaderSource_ && glCompileShader_ && glCreateProgram_ && glAttachShader_ && glLinkProgram_ && glUseProgram_ && glGetUniformLocation_ && glUniform1f_;
 }
 
 static GLuint BuildProgram(void) {
-    const char* vertex_source = "void main(){gl_Position=gl_Vertex;}";
+    const char* vertex_source = "uniform float t;void main(){float c=cos(t),s=sin(t);gl_Position=vec4(c*gl_Vertex.x-s*gl_Vertex.y,s*gl_Vertex.x+c*gl_Vertex.y,0.,1.);}";
     const char* fragment_source = "void main(){gl_FragColor=vec4(.12,.82,.32,1.);}";
     GLuint vertex = glCreateShader_(GL_VERTEX_SHADER);
     GLuint fragment = glCreateShader_(GL_FRAGMENT_SHADER);
@@ -58,7 +64,7 @@ static GLuint BuildProgram(void) {
 
 static int Run(void) {
     WNDCLASSA window_class = {0}; PIXELFORMATDESCRIPTOR pixel_format = {0}; MSG message;
-    HDC device_context; HGLRC render_context; HWND window; int pixel_format_index; GLuint program;
+    HDC device_context; HGLRC render_context; HWND window; int pixel_format_index; GLuint program; GLint time_location;
     window_class.style = CS_OWNDC; window_class.lpfnWndProc = WindowProcedure;
     window_class.hInstance = GetModuleHandleA(0); window_class.lpszClassName = "in4k.rectangle";
     if (!RegisterClassA(&window_class)) return 1;
@@ -76,11 +82,13 @@ static int Run(void) {
     render_context = wglCreateContext(device_context);
     if (!render_context || !wglMakeCurrent(device_context, render_context) || !LoadOpenGl21()) return 4;
     program = BuildProgram();
+    time_location = glGetUniformLocation_(program, "t");
     for (;;) {
         while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) { if (message.message == WM_QUIT) goto done; TranslateMessage(&message); DispatchMessageA(&message); }
         if (GetAsyncKeyState(VK_ESCAPE)) break;
         glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); glUseProgram_(program);
-        glBegin(GL_QUADS); glVertex2f(-.5f, -.5f); glVertex2f(.5f, -.5f); glVertex2f(.5f, .5f); glVertex2f(-.5f, .5f); glEnd(); SwapBuffers(device_context);
+        glUniform1f_(time_location, (float)GetTickCount() * .001f);
+        glBegin(GL_TRIANGLES); glVertex2f(0, .6f); glVertex2f(-.52f, -.4f); glVertex2f(.52f, -.4f); glEnd(); SwapBuffers(device_context);
     }
 done:
     wglMakeCurrent(0, 0); wglDeleteContext(render_context); ReleaseDC(window, device_context); return 0;
