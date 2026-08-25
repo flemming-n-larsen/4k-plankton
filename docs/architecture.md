@@ -120,8 +120,10 @@ The first audio milestone is a synthesized ocean ambience, matching the underwat
 
 The synthesis itself is a small DSP loop, not a sample or a tracker song:
 
-- A one-pole low-pass filter on white noise gives a "surf" body; a one-sample difference (a crude high-pass) gives a "foam" layer that fades in only near loudness peaks.
-- The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation), rather than a periodic wave or a single low-pass filter of noise. The latter was tried first and did not work: slowing a one-pole filter enough to change over seconds also crushes its variance toward zero, since for that filter bandwidth and amplitude shrink together. Waypoint interpolation decouples the two, giving slow, full-range swells.
+- A two-stage one-pole low-pass filter on white noise gives a "surf" body. A first pass used a single low-pass stage and a "foam" layer built from a raw one-sample difference of noise - almost pure high-frequency energy - and sounded far too bright ("meget diskant"); measuring the mean absolute sample-to-sample difference relative to the mean sample magnitude put that version at a ratio of 1.54, characteristic of near-white noise. The current version low-passes the foam layer too and cascades the surf filter, bringing that ratio to 0.30, a better than fivefold reduction, confirmed by regenerating the previous version from source control for a direct before/after comparison rather than judging by ear alone.
+- The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation via the shared `Waypoint` helper), rather than a periodic wave or a single low-pass filter of noise. The latter was tried first and did not work: slowing a one-pole filter enough to change over seconds also crushes its variance toward zero, since for that filter bandwidth and amplitude shrink together. Waypoint interpolation decouples the two, giving slow, full-range swells.
+- A second, slower waypoint (roughly six seconds apart) eases the amount of foam mixed in, so the ambience's brightness itself drifts between calmer and hissier over time rather than sitting at one fixed mix.
+- A sparse, randomly-timed (roughly every 9 to 17 seconds) low resonant "creak" rings underneath - a two-pole resonator tuned to ring at about 180 Hz when excited by a brief noise impulse, giving something between a hull creak and a distant moan. Its feedback coefficients are two plain float literals computed once, offline, from the standard resonator formulas (`2r*cos(2*pi*f/rate)` and `r^2`) rather than calling `cos()` at runtime - this project has no CRT, so no library `sin`/`cos` exists on the C side (only the GLSL shaders can use those freely).
 - The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp - an early version hard-clipped during loud swells, which is audibly harsh; the smooth curve rounds off peaks instead.
 - The loop's tail is crossfaded into its head before use, so playback has no click at the wrap.
 - Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
@@ -199,6 +201,64 @@ Three decisions are worth recording:
   force applied once per particle, outside the pair loop. The classic periodic
   box would instead put a minimum-image test inside the O(n^2) loop, costing
   both bytes and time in the hottest code, and it pops at the box faces.
+
+### NUTS formation
+
+The free-swimming cluster is the main effect. Once, at 30 seconds in (`REVEAL_START`),
+easing over 6 seconds (`REVEAL_EASE`), the cluster dissolves into the word NUTS
+and stays formed for the rest of the run - a finale rather than a recurring
+event. The same `RevealBlend` timeline constants are duplicated in
+`particles.comp.glsl` (which moves the particles) and `particles.vert.glsl`
+(which eases the camera to a front-on view over the same seconds and dollies
+in from the free-swim orbit radius to 1.3), with a comment on each marking
+them as needing to match. The word is scaled and the dolly-in distance tuned
+together so the finished word fills about 85% of the frame's width with a
+comfortable margin, verified by measuring the actual lit-pixel bounding box
+rather than eyeballing it; height is necessarily far less full, since the
+word's 4-letter aspect ratio is much wider than the 16:9 frame; and this holds
+at both 1920x1080 and 1280x720.
+
+The whole scene also fades: in from black over the first 3 seconds
+(`FADE_IN_END`), and back to black starting 5 seconds after NUTS is fully
+formed (`FADE_OUT_START`, derived from `REVEAL_START + REVEAL_EASE + 5`),
+over 4 seconds (`FADE_OUT_DURATION`) - ending the intro on the held word
+rather than an abrupt cut, and staying black afterward. `MasterFade` computes
+this and is duplicated a third time in `background.frag.glsl`, folded
+multiplicatively into `particles.vert.glsl`'s `tint` and into the
+background's final colour, rather than added as a separate overlay quad.
+
+The word is a vector font of lines and circular arcs - N as three line
+segments, U as two segments and a half-circle, T as two segments, S as two
+3/4-circles - not a bitmap or embedded glyph image, matching the "no data
+embedded" principle used for the attraction matrix and initial positions.
+Each particle is assigned a point on one stroke by hashing its own index, so
+the same particle always seeks the same spot; during the hold, that force
+fully replaces the Particle Life pairwise force rather than blending in
+alongside a residual of it. Two mistakes surfaced while building this:
+
+- **A first attempt reduced the pairwise force to a 15% residual instead of
+  removing it.** The result was clumps clustered by stroke rather than smooth
+  strokes. Root cause: 16384 particles compressed onto a thin curve sit far
+  closer together than in the free-swimming sphere, so even 15% of that force
+  is hugely amplified by the extra local density - confirmed by rendering the
+  assigned target positions directly, bypassing the simulation entirely, which
+  showed the letters were correctly shaped and evenly spread; the bug was
+  therefore in the physics blend, not the font.
+- **The hash coefficients used to assign a particle's stroke and position
+  along it were too large.** `hash()`'s `sin()` argument grew large enough
+  (into six figures, well past the roughly 60000 ceiling already proven safe
+  elsewhere in this file) that GPU range reduction lost precision, aliasing
+  many distinct particle indices onto the same output and showing up as
+  visible clumping. Kept well under that ceiling instead.
+
+The S's two arcs originally each swept only a half-circle and had their
+top/bottom bulge directions swapped (an upside-down S); both are now 3/4-circle
+sweeps, curling into a terminal hook past vertical at each end, with the
+correct halves bulging left on top and right on the bottom. With no further
+adjustment the two circles are exactly tangent on the vertical centerline, so
+particles converge on that single point from four symmetric directions and
+pinch into a bowtie instead of a flowing diagonal; both arcs are rotated 30
+degrees the same way to break that symmetry.
 
 ### Background and palette
 

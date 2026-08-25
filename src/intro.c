@@ -209,7 +209,7 @@ static int Run(void) {
     WNDCLASSA window_class = {0}; PIXELFORMATDESCRIPTOR pixel_format = {0}; MSG message;
     HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
     GLuint simulation, rendering, background, buffer;
-    GLint delta_location, time_location, resolution_location, background_time_location, background_resolution_location;
+    GLint delta_location, simulation_time_location, time_location, resolution_location, background_time_location, background_resolution_location;
     RECT client; int width; int height; DWORD start_ticks; float previous; float now; float delta;
 #ifdef DEBUG
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
@@ -255,6 +255,7 @@ static int Run(void) {
     AttachShader(background, GL_FRAGMENT_SHADER, background_fragment_shader);
     LinkProgram(background);
     delta_location = glGetUniformLocation_(simulation, "d");
+    simulation_time_location = glGetUniformLocation_(simulation, "t");
     time_location = glGetUniformLocation_(rendering, "t");
     resolution_location = glGetUniformLocation_(rendering, "r");
     background_time_location = glGetUniformLocation_(background, "t");
@@ -292,6 +293,7 @@ static int Run(void) {
 #endif
 
         glUseProgram_(simulation);
+        glUniform1f_(simulation_time_location, now);
 #ifdef DEBUG
         for (step = 0; step < steps; step++) {
 #endif

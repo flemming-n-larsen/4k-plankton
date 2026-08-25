@@ -25,6 +25,22 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // this many samples rather than jumping, so the amplitude rise and fall
 // itself takes a couple of seconds, like a real wave set.
 #define SWELL_SAMPLES (SAMPLE_RATE * 2)
+// Slower than SWELL_SAMPLES: eases the foam/hiss amount between waypoints, so
+// the brightness of the ambience itself drifts over several seconds instead
+// of staying at one fixed mix.
+#define TEXTURE_SAMPLES (SAMPLE_RATE * 6)
+
+// A resonant two-pole filter tuned once, offline, to ring at ~180 Hz when
+// excited by an impulse - a low creak or moan, not a pitched note. b1 and b2
+// are 2*r*cos(2*pi*180/SAMPLE_RATE) and r*r for r = .9998 (close to but under
+// 1, so the ring decays over a few hundred milliseconds rather than forever);
+// computed by hand rather than calling cos() at runtime, since this project
+// has no CRT and so no library sin/cos on the C side (only GLSL has that).
+#define CREAK_B1 1.99697f
+#define CREAK_B2 .9996f
+// Random interval between creaks, so they do not fall in a mechanical pattern.
+#define CREAK_MIN_SAMPLES (SAMPLE_RATE * 9)
+#define CREAK_MAX_SAMPLES (SAMPLE_RATE * 17)
 
 #pragma pack(push, 1)
 typedef struct {
@@ -55,36 +71,70 @@ static void PutTag(char* destination, const char* text) {
     for (i = 0; i < 4; i++) destination[i] = text[i];
 }
 
+// Eases linearly between two waypoints spaced `period` samples apart,
+// smoothstepped. `counter`, `from`, and `to` are the caller's persistent state.
+static float Waypoint(int* counter, float* from, float* to, int period) {
+    float fraction, eased;
+    if (*counter >= period) { *counter = 0; *from = *to; *to = NextNoise() * .5f + .5f; }
+    fraction = (float)*counter / (float)period;
+    eased = fraction * fraction * (3.f - 2.f * fraction);
+    (*counter)++;
+    return *from + (*to - *from) * eased;
+}
+
 // Synthesizes a seamless, loopable ocean ambience. The amplitude envelope
 // eases between random waypoints a couple of seconds apart, so swells rise
 // and fall with real amplitude rather than staying near-constant - a single
 // leaky-integrator filter was tried first, but a coefficient slow enough to
 // change over seconds also crushed its variance to almost nothing, since for
 // that filter bandwidth and amplitude shrink together. The envelope shapes a
-// low-passed "surf" body, with a high-passed "foam" layer that only appears
-// near the swell peaks. The last CROSSFADE_SAMPLES of a longer run are
+// two-stage low-passed "surf" body (one stage alone still let through enough
+// high end to sound bright and harsh - this project's first pass at the whole
+// ambience had the same complaint, from a "foam" layer that was raw
+// differenced noise, i.e. almost pure treble). Foam is now the differenced
+// noise smoothed by its own low-pass and mixed in at an amount that itself
+// drifts slowly between quieter and hissier waypoints, so the ambience's
+// brightness varies over time rather than sitting at one fixed mix. A sparse,
+// randomly-timed low resonant "creak" - a boat hull, or something living out
+// there - rings underneath. The last CROSSFADE_SAMPLES of a longer run are
 // blended into the loop start so the wrap has no audible click.
 static void* GenerateOcean(void) {
     void* block = VirtualAlloc(0, sizeof(WavHeader) + LOOP_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     float* raw = (float*)VirtualAlloc(0, TOTAL_SAMPLES * sizeof(float), MEM_COMMIT, PAGE_READWRITE);
-    WavHeader* header; short* pcm; int i, swell_counter = SWELL_SAMPLES;
-    float surf = 0.f, previous_white = 0.f, swell_from = 0.f, swell_to = 0.f;
+    WavHeader* header; short* pcm; int i;
+    int swell_counter = SWELL_SAMPLES, texture_counter = TEXTURE_SAMPLES, creak_timer = 0;
+    float surf1 = 0.f, surf2 = 0.f, foam_smooth = 0.f, previous_white = 0.f;
+    float swell_from = 0.f, swell_to = 0.f, texture_from = 0.f, texture_to = 0.f;
+    float creak_y1 = 0.f, creak_y2 = 0.f;
     if (!block || !raw) return 0;
 
     rng_state = AUDIO_SEED;
     for (i = 0; i < TOTAL_SAMPLES; i++) {
         float white = NextNoise();
         float white2 = NextNoise();
-        float fraction, eased, shaped, foam, sample;
-        surf += (white - surf) * .05f;
-        if (swell_counter >= SWELL_SAMPLES) { swell_counter = 0; swell_from = swell_to; swell_to = NextNoise() * .5f + .5f; }
-        fraction = (float)swell_counter / (float)SWELL_SAMPLES;
-        eased = fraction * fraction * (3.f - 2.f * fraction);
-        shaped = swell_from + (swell_to - swell_from) * eased;
-        swell_counter++;
-        foam = white2 - previous_white;
+        float shaped, texture, foam_raw, creak_excite, creak, sample;
+        surf1 += (white - surf1) * .035f;
+        surf2 += (surf1 - surf2) * .035f;
+        shaped = Waypoint(&swell_counter, &swell_from, &swell_to, SWELL_SAMPLES);
+        texture = Waypoint(&texture_counter, &texture_from, &texture_to, TEXTURE_SAMPLES);
+
+        foam_raw = white2 - previous_white;
         previous_white = white2;
-        sample = surf * (.25f + .7f * shaped) + foam * shaped * shaped * .5f;
+        foam_smooth += (foam_raw - foam_smooth) * .3f;
+
+        if (creak_timer <= 0) {
+            creak_timer = CREAK_MIN_SAMPLES + (int)(NextNoise() * .5f * (float)(CREAK_MAX_SAMPLES - CREAK_MIN_SAMPLES));
+            creak_excite = (NextNoise() - .5f) * .6f;
+        } else {
+            creak_excite = 0.f;
+        }
+        creak_timer--;
+        creak = creak_excite + CREAK_B1 * creak_y1 - CREAK_B2 * creak_y2;
+        creak_y2 = creak_y1; creak_y1 = creak;
+
+        sample = surf2 * (.25f + .7f * shaped)
+               + foam_smooth * shaped * shaped * (.08f + .32f * texture)
+               + creak * .05f;
         // Soft-knee saturation instead of a hard clamp: maps all of R into
         // (-1,1) smoothly, so loud swells round off instead of clipping.
         raw[i] = sample / (1.f + (sample < 0.f ? -sample : sample));
