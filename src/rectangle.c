@@ -51,8 +51,8 @@ static int LoadOpenGl21(void) {
 }
 
 static GLuint BuildProgram(void) {
-    const char* vertex_source = "uniform float t;void main(){float c=cos(t),s=sin(t);gl_Position=vec4(c*gl_Vertex.x-s*gl_Vertex.y,s*gl_Vertex.x+c*gl_Vertex.y,0.,1.);}";
-    const char* fragment_source = "void main(){gl_FragColor=vec4(.12,.82,.32,1.);}";
+    const char* vertex_source = "uniform float t;varying vec4 c;void main(){float o=cos(t),s=sin(t);gl_Position=vec4(o*gl_Vertex.x-s*gl_Vertex.y,s*gl_Vertex.x+o*gl_Vertex.y,0.,1.);c=gl_Color;}";
+    const char* fragment_source = "varying vec4 c;void main(){gl_FragColor=c;}";
     GLuint vertex = glCreateShader_(GL_VERTEX_SHADER);
     GLuint fragment = glCreateShader_(GL_FRAGMENT_SHADER);
     GLuint program = glCreateProgram_();
@@ -88,7 +88,11 @@ static int Run(void) {
         if (GetAsyncKeyState(VK_ESCAPE)) break;
         glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); glUseProgram_(program);
         glUniform1f_(time_location, (float)GetTickCount() * .001f);
-        glBegin(GL_TRIANGLES); glVertex2f(0, .6f); glVertex2f(-.52f, -.4f); glVertex2f(.52f, -.4f); glEnd(); SwapBuffers(device_context);
+        glBegin(GL_TRIANGLES);
+        glColor3f(1, 0, 0); glVertex2f(0, .6f);
+        glColor3f(0, 1, 0); glVertex2f(-.52f, -.4f);
+        glColor3f(0, 0, 1); glVertex2f(.52f, -.4f);
+        glEnd(); SwapBuffers(device_context);
     }
 done:
     wglMakeCurrent(0, 0); wglDeleteContext(render_context); ReleaseDC(window, device_context); return 0;
