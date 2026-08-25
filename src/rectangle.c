@@ -128,9 +128,9 @@ static int Run(void) {
         glUniform1f_(time_location, (float)GetTickCount() * .001f);
         glUniform2f_(resolution_location, (float)width, (float)height);
         glBegin(GL_TRIANGLES);
-        glColor3f(1, 0, 0); glVertex2f(0, .6f);
-        glColor3f(0, 1, 0); glVertex2f(-.52f, -.4f);
-        glColor3f(0, 0, 1); glVertex2f(.52f, -.4f);
+        glVertex2f(-1, -1);
+        glVertex2f(3, -1);
+        glVertex2f(-1, 3);
         glEnd(); SwapBuffers(device_context);
     }
 done:

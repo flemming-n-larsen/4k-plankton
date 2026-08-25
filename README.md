@@ -10,7 +10,7 @@ The current implementation direction is a native Win32/x86 intro built through a
 
 The project uses a headless command-line toolchain. It does not require Visual Studio or Visual Studio Code. Compilation uses the standalone Microsoft C++ Build Tools and Windows SDK, driven directly by PowerShell scripts, with Crinkler performing the final linking and executable compression. CMake is not part of the initial baseline.
 
-The first implementation milestone is a CRT-free Win32/x86 OpenGL rotating triangle with no audio. Its Compo build must be Crinkler-compressed to 4,096 bytes or less. Exact versions and integrity checks are defined in [tools.lock.json](tools.lock.json); see [docs/toolchain.md](docs/toolchain.md) for installation and version-update rules.
+The first implementation milestone is a CRT-free Win32/x86 OpenGL fullscreen-triangle shader with no audio. Its Compo build must be Crinkler-compressed to 4,096 bytes or less. Exact versions and integrity checks are defined in [tools.lock.json](tools.lock.json); see [docs/toolchain.md](docs/toolchain.md) for installation and version-update rules.
 
 Audio will be generated at runtime rather than embedded as a music file. The intro will use an audio abstraction so the synthesis and playback implementation can be selected later without coupling the rest of the intro to one audio solution. Candidate approaches include [Sointu](https://github.com/vsariola/sointu), [4klang](https://github.com/gopher-atz/4klang), [Oidos](https://github.com/askeksa/Oidos), and shader-based audio.
 

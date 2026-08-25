@@ -4,7 +4,7 @@
 
 This repository develops a native PC in4k intro: a Windows executable intended to fit within a 4,096-byte competition limit.
 
-The current bootstrap is a CRT-free Win32/x86 OpenGL rotating triangle. Audio is intentionally deferred and must remain behind the planned audio abstraction.
+The current bootstrap is a CRT-free Win32/x86 OpenGL fullscreen-triangle shader. Audio is intentionally deferred and must remain behind the planned audio abstraction.
 
 ## Build workflow
 
