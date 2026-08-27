@@ -123,7 +123,7 @@ The synthesis itself is a small DSP loop, not a sample or a tracker song:
 - A two-stage one-pole low-pass filter on white noise gives a "surf" body. A first pass used a single low-pass stage and a "foam" layer built from a raw one-sample difference of noise - almost pure high-frequency energy - and sounded far too bright ("meget diskant"); measuring the mean absolute sample-to-sample difference relative to the mean sample magnitude put that version at a ratio of 1.54, characteristic of near-white noise. The current version low-passes the foam layer too and cascades the surf filter, bringing that ratio to 0.30, a better than fivefold reduction, confirmed by regenerating the previous version from source control for a direct before/after comparison rather than judging by ear alone.
 - The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation via the shared `Waypoint` helper), rather than a periodic wave or a single low-pass filter of noise. The latter was tried first and did not work: slowing a one-pole filter enough to change over seconds also crushes its variance toward zero, since for that filter bandwidth and amplitude shrink together. Waypoint interpolation decouples the two, giving slow, full-range swells.
 - A second, slower waypoint (roughly six seconds apart) eases the amount of foam mixed in, so the ambience's brightness itself drifts between calmer and hissier over time rather than sitting at one fixed mix.
-- A sparse, randomly-timed (roughly every 9 to 17 seconds) low resonant "creak" rings underneath - a two-pole resonator tuned to ring at about 180 Hz when excited by a brief noise impulse, giving something between a hull creak and a distant moan. Its feedback coefficients are two plain float literals computed once, offline, from the standard resonator formulas (`2r*cos(2*pi*f/rate)` and `r^2`) rather than calling `cos()` at runtime - this project has no CRT, so no library `sin`/`cos` exists on the C side (only the GLSL shaders can use those freely).
+- A sparse, randomly-timed (roughly every 9 to 17 seconds) low resonant "creak" rings underneath - a two-pole resonator tuned to ring at about 130 Hz when driven, giving something between a hull creak and a distant moan. Its feedback coefficients are two plain float literals computed once, offline, from the standard resonator formulas (`2r*cos(2*pi*f/rate)` and `r^2`) rather than calling `cos()` at runtime - this project has no CRT, so no library `sin`/`cos` exists on the C side (only the GLSL shaders can use those freely). The first version of this was silent in practice: the random-interval draw used the noise generator's bipolar `[-1,1)` output as if it were unipolar, and the loop was only 10 seconds long against a 9-17-second average interval, so the first creak's minimum possible delay landed almost exactly on the edge of the guard that skips exciting too close to either loop boundary, leaving it essentially no room to ever fire. Confirmed by logging every scheduling decision rather than trusting the arithmetic: fixed by rescaling the draw properly and lengthening the loop to 20 seconds (which also reduces how often the loop audibly repeats, addressing "more varied" further at no executable-byte cost, since only the runtime-generated buffer grows). Once actually audible, the creak read as an out-of-place electronic "bib" rather than a groan; the resonator was originally driven by a single-sample impulse, which excites every frequency at once and rings the filter as a clean, near-pure decaying sine - and worse, the excitation's own envelope started at full amplitude and only decayed, giving the burst a hard, instant onset on top of that clean tone. Fixed on two axes: the excitation is now a noise burst spread over about 125 ms with a parabolic envelope (zero at both ends, peaking at the midpoint) instead of one sample, so the resonator is driven like a swelling groan rather than struck like a bell; and the resonance itself was retuned lower and shorter-ringing (130 Hz, r = .996, down from 180 Hz, r = .9998) so it decays before it reads as a sustained tone. Verified with a windowed peak-amplitude scan of the regenerated WAV: a smooth rise-and-fall across roughly 150-180 ms peaking several times above the surrounding baseline, not an instantaneous spike.
 - The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp - an early version hard-clipped during loud swells, which is audibly harsh; the smooth curve rounds off peaks instead.
 - The loop's tail is crossfaded into its head before use, so playback has no click at the wrap.
 - Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
@@ -222,10 +222,19 @@ The whole scene also fades: in from black over the first 3 seconds
 (`FADE_IN_END`), and back to black starting 5 seconds after NUTS is fully
 formed (`FADE_OUT_START`, derived from `REVEAL_START + REVEAL_EASE + 5`),
 over 4 seconds (`FADE_OUT_DURATION`) - ending the intro on the held word
-rather than an abrupt cut, and staying black afterward. `MasterFade` computes
-this and is duplicated a third time in `background.frag.glsl`, folded
-multiplicatively into `particles.vert.glsl`'s `tint` and into the
-background's final colour, rather than added as a separate overlay quad.
+rather than an abrupt cut. `MasterFade` computes this and is duplicated a
+third time in `background.frag.glsl`, folded multiplicatively into
+`particles.vert.glsl`'s `tint` and into the background's final colour, rather
+than added as a separate overlay quad.
+
+The Compo build then exits on its own, rather than sitting on the black
+screen indefinitely until the operator intervenes: `src/intro.c` holds a
+fourth copy of this timeline, `END_SECONDS`, set to the moment the fade
+reaches full black (`REVEAL_START + REVEAL_EASE + 5 + FADE_OUT_DURATION` = 45
+seconds) plus a further 3-second hold, and breaks the main loop once `now`
+passes it. This check is compiled out of Debug (`#ifndef DEBUG`), since
+Debug's `-live`/`-shot` diagnostics need to keep running past that point on
+demand.
 
 The word is a vector font of lines and circular arcs - N as three line
 segments, U as two segments and a half-circle, T as two segments, S as two

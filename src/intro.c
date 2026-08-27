@@ -6,6 +6,14 @@
 #define PARTICLE_COUNT 16384
 #define WORKGROUP_SIZE 256
 
+// When the run should end, in seconds: REVEAL_START (30) + REVEAL_EASE (6) +
+// the 5-second hold + FADE_OUT_DURATION (4) from particles.vert.glsl's
+// MasterFade, i.e. the moment the screen reaches full black, plus a further
+// 3-second hold so the ending reads as deliberate rather than the window
+// just sitting there. Must be kept in step with those shader constants by
+// hand, same as the other timeline values duplicated across files.
+#define END_SECONDS 48.f
+
 typedef char GLchar;
 typedef int GLsizeiptr;
 #ifndef APIENTRYP
@@ -284,6 +292,9 @@ static int Run(void) {
         while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) { if (message.message == WM_QUIT) goto done; TranslateMessage(&message); DispatchMessageA(&message); }
         if (GetAsyncKeyState(VK_ESCAPE)) break;
         now = (float)(GetTickCount() - start_ticks) * .001f;
+#ifndef DEBUG
+        if (now >= END_SECONDS) break;
+#endif
         delta = now - previous; previous = now;
         if (delta > 1.f / 30.f) delta = 1.f / 30.f;
         if (delta <= 0.f) delta = .001f;
