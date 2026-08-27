@@ -25,10 +25,12 @@ float RevealBlend(float time) {
     return smoothstep(REVEAL_START, REVEAL_START + REVEAL_EASE, time);
 }
 
-// Fades in from black over the first few seconds, then fades back to black a
-// few seconds after NUTS is fully formed, ending the intro on the held word
-// rather than an abrupt cut. Must match the copy in background.frag.glsl.
-#define FADE_IN_END 3.
+// Fades in from black slowly, so the procedural background (depth gradient,
+// caustics, god rays) reads clearly before the particles compete for
+// attention, then fades back to black a few seconds after NUTS is fully
+// formed, ending the intro on the held word rather than an abrupt cut. Must
+// match the copy in background.frag.glsl.
+#define FADE_IN_END 8.
 #define FADE_OUT_START (REVEAL_START + REVEAL_EASE + 5.)
 #define FADE_OUT_DURATION 4.
 

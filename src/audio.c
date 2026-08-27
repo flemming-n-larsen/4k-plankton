@@ -12,9 +12,8 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 #define SND_LOOP 8
 
 #define SAMPLE_RATE 22050
-// Long enough to give the sparse, 9-17-second-spaced creaks (see CREAK_MIN/
-// MAX_SAMPLES) real room to land away from both loop edges, and to make the
-// loop itself less repetitive.
+// Kept longer than the couple of seconds a single swell takes, so the loop
+// itself does not feel repetitive.
 #define LOOP_SECONDS 20
 #define LOOP_SAMPLES (SAMPLE_RATE * LOOP_SECONDS)
 // Blended into the loop start so the seam is inaudible; see GenerateOcean.
@@ -32,24 +31,6 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // the brightness of the ambience itself drifts over several seconds instead
 // of staying at one fixed mix.
 #define TEXTURE_SAMPLES (SAMPLE_RATE * 6)
-
-// A resonant two-pole filter tuned once, offline, to ring at ~130 Hz when
-// driven - a low creak or moan, not a pitched note. b1 and b2 are
-// 2*r*cos(2*pi*130/SAMPLE_RATE) and r*r for r = .996 (lower and shorter-ringing
-// than an earlier r = .9998/180 Hz tuning, which decayed as a long, near-pure
-// sine and read as an electronic "bib" beep rather than a creak); computed by
-// hand rather than calling cos() at runtime, since this project has no CRT
-// and so no library sin/cos on the C side (only GLSL has that).
-#define CREAK_B1 1.99063f
-#define CREAK_B2 .992016f
-// Random interval between creaks, so they do not fall in a mechanical pattern.
-#define CREAK_MIN_SAMPLES (SAMPLE_RATE * 9)
-#define CREAK_MAX_SAMPLES (SAMPLE_RATE * 17)
-// A single-sample impulse rang the resonator as a clean decaying sine - the
-// "bib" the excitation is instead spread over this many samples (~125 ms) as
-// an envelope-shaped noise burst, so the resonator is driven like a groan
-// instead of struck like a bell.
-#define CREAK_BURST_SAMPLES (SAMPLE_RATE / 8)
 
 #pragma pack(push, 1)
 typedef struct {
@@ -103,25 +84,26 @@ static float Waypoint(int* counter, float* from, float* to, int period) {
 // differenced noise, i.e. almost pure treble). Foam is now the differenced
 // noise smoothed by its own low-pass and mixed in at an amount that itself
 // drifts slowly between quieter and hissier waypoints, so the ambience's
-// brightness varies over time rather than sitting at one fixed mix. A sparse,
-// randomly-timed low resonant "creak" - a boat hull, or something living out
-// there - rings underneath. The last CROSSFADE_SAMPLES of a longer run are
-// blended into the loop start so the wrap has no audible click.
+// brightness varies over time rather than sitting at one fixed mix. An
+// earlier version added a sparse, randomly-timed resonant "creak" on top;
+// it read as an out-of-place electronic artifact rather than part of the
+// ocean and was removed, keeping the ambience to just surf and foam. The
+// last CROSSFADE_SAMPLES of a longer run are blended into the loop start so
+// the wrap has no audible click.
 static void* GenerateOcean(void) {
     void* block = VirtualAlloc(0, sizeof(WavHeader) + LOOP_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     float* raw = (float*)VirtualAlloc(0, TOTAL_SAMPLES * sizeof(float), MEM_COMMIT, PAGE_READWRITE);
     WavHeader* header; short* pcm; int i;
-    int swell_counter = SWELL_SAMPLES, texture_counter = TEXTURE_SAMPLES, creak_timer = 0, creak_burst = 0;
+    int swell_counter = SWELL_SAMPLES, texture_counter = TEXTURE_SAMPLES;
     float surf1 = 0.f, surf2 = 0.f, foam_smooth = 0.f, previous_white = 0.f;
     float swell_from = 0.f, swell_to = 0.f, texture_from = 0.f, texture_to = 0.f;
-    float creak_y1 = 0.f, creak_y2 = 0.f;
     if (!block || !raw) return 0;
 
     rng_state = AUDIO_SEED;
     for (i = 0; i < TOTAL_SAMPLES; i++) {
         float white = NextNoise();
         float white2 = NextNoise();
-        float shaped, texture, foam_raw, creak_excite, creak, sample;
+        float shaped, texture, foam_raw, sample;
         surf1 += (white - surf1) * .035f;
         surf2 += (surf1 - surf2) * .035f;
         shaped = Waypoint(&swell_counter, &swell_from, &swell_to, SWELL_SAMPLES);
@@ -131,38 +113,8 @@ static void* GenerateOcean(void) {
         previous_white = white2;
         foam_smooth += (foam_raw - foam_smooth) * .3f;
 
-        if (creak_timer <= 0) {
-            // NextNoise() is bipolar ([-1,1)); rescaled to [0,1) here since a
-            // negative draw would shorten or even negate the interval - the
-            // bug that made the very first creak's minimum delay land right
-            // at the edge of the "too close to the loop end" guard below,
-            // leaving it almost no room to ever actually fire.
-            creak_timer = CREAK_MIN_SAMPLES + (int)((NextNoise() * .5f + .5f) * (float)(CREAK_MAX_SAMPLES - CREAK_MIN_SAMPLES));
-            // Start the excitation burst (but still reschedule) only away
-            // from the loop edges, so a creak's decay is never split across
-            // the crossfade seam.
-            if (i > SAMPLE_RATE && i < LOOP_SAMPLES - SAMPLE_RATE) creak_burst = CREAK_BURST_SAMPLES;
-        }
-        creak_timer--;
-        if (creak_burst > 0) {
-            // Parabolic envelope: 0 at both ends of the burst, peaking at its
-            // midpoint - a rounded swell in and out. An envelope that instead
-            // starts at full amplitude and only decays gives the burst a hard,
-            // instant onset, which is what rang the resonator as a click - the
-            // "bib" - rather than driving it like a groan.
-            float fraction = 1.f - (float)creak_burst / (float)CREAK_BURST_SAMPLES;
-            float envelope = 4.f * fraction * (1.f - fraction);
-            creak_excite = NextNoise() * envelope * .4f;
-            creak_burst--;
-        } else {
-            creak_excite = 0.f;
-        }
-        creak = creak_excite + CREAK_B1 * creak_y1 - CREAK_B2 * creak_y2;
-        creak_y2 = creak_y1; creak_y1 = creak;
-
         sample = surf2 * (.25f + .7f * shaped)
-               + foam_smooth * shaped * shaped * (.08f + .32f * texture)
-               + creak * .05f;
+               + foam_smooth * shaped * shaped * (.08f + .32f * texture);
         // Soft-knee saturation instead of a hard clamp: maps all of R into
         // (-1,1) smoothly, so loud swells round off instead of clipping.
         raw[i] = sample / (1.f + (sample < 0.f ? -sample : sample));

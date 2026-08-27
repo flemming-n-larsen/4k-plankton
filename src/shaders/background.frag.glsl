@@ -6,7 +6,7 @@ uniform vec2 r;
 // an abrupt cut.
 #define REVEAL_START 30.
 #define REVEAL_EASE 6.
-#define FADE_IN_END 3.
+#define FADE_IN_END 8.
 #define FADE_OUT_START (REVEAL_START + REVEAL_EASE + 5.)
 #define FADE_OUT_DURATION 4.
 

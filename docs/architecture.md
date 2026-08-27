@@ -120,15 +120,14 @@ The first audio milestone is a synthesized ocean ambience, matching the underwat
 
 The synthesis itself is a small DSP loop, not a sample or a tracker song:
 
-- A two-stage one-pole low-pass filter on white noise gives a "surf" body. A first pass used a single low-pass stage and a "foam" layer built from a raw one-sample difference of noise - almost pure high-frequency energy - and sounded far too bright ("meget diskant"); measuring the mean absolute sample-to-sample difference relative to the mean sample magnitude put that version at a ratio of 1.54, characteristic of near-white noise. The current version low-passes the foam layer too and cascades the surf filter, bringing that ratio to 0.30, a better than fivefold reduction, confirmed by regenerating the previous version from source control for a direct before/after comparison rather than judging by ear alone.
-- The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation via the shared `Waypoint` helper), rather than a periodic wave or a single low-pass filter of noise. The latter was tried first and did not work: slowing a one-pole filter enough to change over seconds also crushes its variance toward zero, since for that filter bandwidth and amplitude shrink together. Waypoint interpolation decouples the two, giving slow, full-range swells.
-- A second, slower waypoint (roughly six seconds apart) eases the amount of foam mixed in, so the ambience's brightness itself drifts between calmer and hissier over time rather than sitting at one fixed mix.
-- A sparse, randomly-timed (roughly every 9 to 17 seconds) low resonant "creak" rings underneath - a two-pole resonator tuned to ring at about 130 Hz when driven, giving something between a hull creak and a distant moan. Its feedback coefficients are two plain float literals computed once, offline, from the standard resonator formulas (`2r*cos(2*pi*f/rate)` and `r^2`) rather than calling `cos()` at runtime - this project has no CRT, so no library `sin`/`cos` exists on the C side (only the GLSL shaders can use those freely). The first version of this was silent in practice: the random-interval draw used the noise generator's bipolar `[-1,1)` output as if it were unipolar, and the loop was only 10 seconds long against a 9-17-second average interval, so the first creak's minimum possible delay landed almost exactly on the edge of the guard that skips exciting too close to either loop boundary, leaving it essentially no room to ever fire. Confirmed by logging every scheduling decision rather than trusting the arithmetic: fixed by rescaling the draw properly and lengthening the loop to 20 seconds (which also reduces how often the loop audibly repeats, addressing "more varied" further at no executable-byte cost, since only the runtime-generated buffer grows). Once actually audible, the creak read as an out-of-place electronic "bib" rather than a groan; the resonator was originally driven by a single-sample impulse, which excites every frequency at once and rings the filter as a clean, near-pure decaying sine - and worse, the excitation's own envelope started at full amplitude and only decayed, giving the burst a hard, instant onset on top of that clean tone. Fixed on two axes: the excitation is now a noise burst spread over about 125 ms with a parabolic envelope (zero at both ends, peaking at the midpoint) instead of one sample, so the resonator is driven like a swelling groan rather than struck like a bell; and the resonance itself was retuned lower and shorter-ringing (130 Hz, r = .996, down from 180 Hz, r = .9998) so it decays before it reads as a sustained tone. Verified with a windowed peak-amplitude scan of the regenerated WAV: a smooth rise-and-fall across roughly 150-180 ms peaking several times above the surrounding baseline, not an instantaneous spike.
-- The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp - an early version hard-clipped during loud swells, which is audibly harsh; the smooth curve rounds off peaks instead.
+- A two-stage one-pole low-pass filter on white noise gives a "surf" body; a low-passed, smoothed noise difference gives "foam" on top. Both stages keep the ambience soft rather than bright/hissy.
+- The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation via the shared `Waypoint` helper), giving slow, full-range swells rather than a constant level.
+- A second, slower waypoint (roughly six seconds apart) eases the amount of foam mixed in, so the ambience's brightness itself drifts between calmer and hissier over time.
+- The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp, so loud swells round off instead of clipping.
 - The loop's tail is crossfaded into its head before use, so playback has no click at the wrap.
 - Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
 
-None of this needs the CRT: the PRNG and filters are pure integer/float arithmetic, and every float-to-integer conversion casts through a signed `int` rather than `unsigned` - a direct float-to-unsigned cast pulls in a CRT helper that `/NODEFAULTLIB` has no library for, which surfaced once already in this project as an `LNK1120`.
+None of this needs the CRT: the PRNG and filters are pure integer/float arithmetic, and every float-to-integer conversion casts through a signed `int` rather than `unsigned`, since a direct float-to-unsigned cast pulls in a CRT helper that `/NODEFAULTLIB` has no library for.
 
 ### Open audio questions
 
@@ -213,15 +212,16 @@ event. The same `RevealBlend` timeline constants are duplicated in
 in from the free-swim orbit radius to 1.3), with a comment on each marking
 them as needing to match. The word is scaled and the dolly-in distance tuned
 together so the finished word fills about 85% of the frame's width with a
-comfortable margin, verified by measuring the actual lit-pixel bounding box
-rather than eyeballing it; height is necessarily far less full, since the
-word's 4-letter aspect ratio is much wider than the 16:9 frame; and this holds
-at both 1920x1080 and 1280x720.
+comfortable margin at both 1920x1080 and 1280x720; height is necessarily far
+less full, since the word's 4-letter aspect ratio is much wider than the
+16:9 frame.
 
-The whole scene also fades: in from black over the first 3 seconds
-(`FADE_IN_END`), and back to black starting 5 seconds after NUTS is fully
-formed (`FADE_OUT_START`, derived from `REVEAL_START + REVEAL_EASE + 5`),
-over 4 seconds (`FADE_OUT_DURATION`) - ending the intro on the held word
+The whole scene also fades: in from black over the first 8 seconds
+(`FADE_IN_END`) - slow enough that the procedural underwater background
+(depth gradient, caustics, god rays) reads clearly before the particles
+brighten to full strength - and back to black starting 5 seconds after NUTS
+is fully formed (`FADE_OUT_START`, derived from `REVEAL_START + REVEAL_EASE +
+5`), over 4 seconds (`FADE_OUT_DURATION`), ending the intro on the held word
 rather than an abrupt cut. `MasterFade` computes this and is duplicated a
 third time in `background.frag.glsl`, folded multiplicatively into
 `particles.vert.glsl`'s `tint` and into the background's final colour, rather
@@ -238,36 +238,17 @@ demand.
 
 The word is a vector font of lines and circular arcs - N as three line
 segments, U as two segments and a half-circle, T as two segments, S as two
-3/4-circles - not a bitmap or embedded glyph image, matching the "no data
-embedded" principle used for the attraction matrix and initial positions.
-Each particle is assigned a point on one stroke by hashing its own index, so
-the same particle always seeks the same spot; during the hold, that force
-fully replaces the Particle Life pairwise force rather than blending in
-alongside a residual of it. Two mistakes surfaced while building this:
-
-- **A first attempt reduced the pairwise force to a 15% residual instead of
-  removing it.** The result was clumps clustered by stroke rather than smooth
-  strokes. Root cause: 16384 particles compressed onto a thin curve sit far
-  closer together than in the free-swimming sphere, so even 15% of that force
-  is hugely amplified by the extra local density - confirmed by rendering the
-  assigned target positions directly, bypassing the simulation entirely, which
-  showed the letters were correctly shaped and evenly spread; the bug was
-  therefore in the physics blend, not the font.
-- **The hash coefficients used to assign a particle's stroke and position
-  along it were too large.** `hash()`'s `sin()` argument grew large enough
-  (into six figures, well past the roughly 60000 ceiling already proven safe
-  elsewhere in this file) that GPU range reduction lost precision, aliasing
-  many distinct particle indices onto the same output and showing up as
-  visible clumping. Kept well under that ceiling instead.
-
-The S's two arcs originally each swept only a half-circle and had their
-top/bottom bulge directions swapped (an upside-down S); both are now 3/4-circle
-sweeps, curling into a terminal hook past vertical at each end, with the
-correct halves bulging left on top and right on the bottom. With no further
-adjustment the two circles are exactly tangent on the vertical centerline, so
-particles converge on that single point from four symmetric directions and
-pinch into a bowtie instead of a flowing diagonal; both arcs are rotated 30
-degrees the same way to break that symmetry.
+3/4-circles, each rotated 30 degrees to keep the arcs from meeting tangent at
+a single pinch point on the centerline - not a bitmap or embedded glyph
+image, matching the "no data embedded" principle used for the attraction
+matrix and initial positions. Each particle is assigned a point on one stroke
+by hashing its own index (kept well under the argument magnitude where GPU
+`sin()` range reduction stays precise, to avoid aliasing distinct indices
+onto the same output), so the same particle always seeks the same spot;
+during the hold, that force fully replaces the Particle Life pairwise force
+rather than blending in a residual of it, since the extra density of points
+compressed onto a thin curve would otherwise amplify any residual into
+clumps.
 
 ### Background and palette
 
@@ -285,11 +266,9 @@ already overwrites every pixel.
 
 The particle palette is a cosine gradient (`a + b*cos(2*pi*(c*x+d))`) chosen to
 stay in the teal/cyan/blue/violet range, with the red channel's amplitude kept
-small so no phase of the 6 types swings into a warm hue - a first attempt with
-a larger red amplitude produced one type that read as brown, found by
-computing all 6 discrete outputs by hand rather than only eyeballing renders.
-Particles further from the camera are also pulled toward a dark blue-black,
-mimicking how real water absorbs colour with depth.
+small so no phase of the 6 types swings into a warm hue. Particles further
+from the camera are also pulled toward a dark blue-black, mimicking how real
+water absorbs colour with depth.
 
 ### Debug-only tooling
 
@@ -306,10 +285,8 @@ grab, by reading the back buffer in-process and writing `shot.bmp`:
   compo resolutions can be compared without changing display mode;
 - `-steps<k>` runs k simulation steps per rendered frame. Rendering never feeds
   back into the simulation, so this reaches a late state in a fraction of the
-  wall-clock time while producing byte-identical output - verified by comparing
-  `-shot1800 -steps1` against `-shot180 -steps10` and `-shot90 -steps20`. That
-  equivalence also demonstrates the simulation is deterministic, confirming the
-  split-pass integration is free of read/write races.
+  wall-clock time while producing byte-identical output, since the simulation
+  is fully deterministic.
 
 Capturing from the screen instead is unreliable: a fullscreen window that has
 lost foreground returns a stale frame, which is easily mistaken for a frozen
