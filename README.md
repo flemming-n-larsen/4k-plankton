@@ -79,7 +79,7 @@ Requires [ffmpeg](https://ffmpeg.org/) (`scoop install ffmpeg`). Stitch the fram
 ffmpeg -framerate 30 -i frames\frame%05d.bmp -stream_loop -1 -i ocean.wav -shortest -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 160k in4k-intro.mp4
 ```
 
-`-shortest` trims the looped ambience to the video's length. `frames\` and the output video are large and not meant for source control; delete `frames\` once the video is encoded.
+`-shortest` trims the looped ambience to the video's length. `frames\` is large and not meant for source control; delete it once the video is encoded. The current recording is checked in at [media/in4k-intro.mp4](media/in4k-intro.mp4).
 
 To try a different attractor, change `SEED` in `src/shaders/particles.comp.glsl`. Nothing is seeded from the clock, so a given seed always produces the same run.
 
