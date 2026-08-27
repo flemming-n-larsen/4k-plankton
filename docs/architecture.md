@@ -168,7 +168,8 @@ The compo build must not be treated as the only artifact. A safe build is useful
 ## Bootstrap milestone
 
 The bootstrap milestone is a CRT-free Win32/x86 executable running a 3D
-[Particle Life](https://particle-life.com/) simulation on the GPU, with a
+[Particle Life](https://particle-life.com/) simulation on the GPU, titled
+**Plankton** after the drifting swarm it depicts, with a
 synthesized ocean ambience (see Audio direction below). GLSL source is kept
 readable under `src/shaders/` for Debug and minified into generated C strings
 for Compo. It has no external graphics framework or runtime dependency beyond

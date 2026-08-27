@@ -1,6 +1,6 @@
-# PC in4k setup
+# Plankton — a PC in4k
 
-This project is about creating the setup required to make a PC in4k (4,096-byte intro) for competing in a 4k intro scene competition.
+This project is about creating the setup required to make a PC in4k (4,096-byte intro) for competing in a 4k intro scene competition. The intro itself is titled **Plankton**.
 
 The goal is to provide a practical starting point for developing, building, and packaging a very small Windows intro, where the final executable must fit within the competition's 4 KiB limit.
 
