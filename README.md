@@ -65,6 +65,22 @@ The Debug build writes shader and OpenGL diagnostics to `in4k.log` as well as to
 
 The Compo build runs borderless fullscreen at the current desktop resolution, and is resolution-independent, so one executable covers both resolutions TRSAC requires.
 
+## Recording a video
+
+`-record<fps>` captures the entire run frame-by-frame straight from the back buffer to `frames/frameNNNNN.bmp`, then exits once the run ends. This is more reliable than screen/window capture, which can record the wrong window against this exclusive fullscreen surface.
+
+```powershell
+.\out\Debug\in4k-particles.exe -record30 -width960 -height540
+```
+
+Requires [ffmpeg](https://ffmpeg.org/) (`scoop install ffmpeg`). Stitch the frames and the freshly generated `ocean.wav` (written alongside `frames/` by the same Debug run) into one MP4:
+
+```powershell
+ffmpeg -framerate 30 -i frames\frame%05d.bmp -stream_loop -1 -i ocean.wav -shortest -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -b:a 160k in4k-intro.mp4
+```
+
+`-shortest` trims the looped ambience to the video's length. `frames\` and the output video are large and not meant for source control; delete `frames\` once the video is encoded.
+
 To try a different attractor, change `SEED` in `src/shaders/particles.comp.glsl`. Nothing is seeded from the clock, so a given seed always produces the same run.
 
 ## Introduction to the in4k scene

@@ -150,7 +150,7 @@ static int Option(const char* name, int fallback) {
     return 0;
 }
 
-static void Capture(int width, int height) {
+static void Capture(const char* path, int width, int height) {
     BITMAPFILEHEADER file_header = {0}; BITMAPINFOHEADER info_header = {0};
     int stride = (width * 3 + 3) & ~3, size = stride * height; DWORD written;
     void* pixels = VirtualAlloc(0, size, MEM_COMMIT, PAGE_READWRITE);
@@ -160,7 +160,7 @@ static void Capture(int width, int height) {
     file_header.bfType = 0x4D42; file_header.bfOffBits = 54; file_header.bfSize = 54 + size;
     info_header.biSize = 40; info_header.biWidth = width; info_header.biHeight = height;
     info_header.biPlanes = 1; info_header.biBitCount = 24; info_header.biSizeImage = size;
-    file = CreateFileA("shot.bmp", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    file = CreateFileA(path, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
     if (file != INVALID_HANDLE_VALUE) {
         WriteFile(file, &file_header, 14, &written, 0);
         WriteFile(file, &info_header, 40, &written, 0);
@@ -168,6 +168,19 @@ static void Capture(int width, int height) {
         CloseHandle(file);
     }
     VirtualFree(pixels, 0, MEM_RELEASE);
+}
+
+// Builds "frames/frameNNNNN.bmp" without sprintf, since this project has no
+// CRT. Used by -record to number an entire captured sequence for ffmpeg to
+// later stitch into a video - reading the back buffer in-process like this
+// sidesteps screen/window capture entirely, which is unreliable against this
+// exclusive fullscreen window (see -shot/-live above).
+static void FormatFrameName(char* buffer, int frame) {
+    const char* prefix = "frames/frame";
+    int i = 0, d;
+    for (; prefix[i]; i++) buffer[i] = prefix[i];
+    for (d = 10000; d >= 1; d /= 10) buffer[i++] = '0' + (frame / d) % 10;
+    buffer[i++] = '.'; buffer[i++] = 'b'; buffer[i++] = 'm'; buffer[i++] = 'p'; buffer[i] = 0;
 }
 #endif
 
@@ -223,6 +236,11 @@ static int Run(void) {
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
     int forced_width = Option("-width", 0), forced_height = Option("-height", 0);
     int steps = Option("-steps", 1), step;
+    // "-record<fps>" (e.g. "-record30") captures every frame of a full,
+    // deterministic run to frames/frameNNNNN.bmp at that frame rate, for
+    // stitching into a video externally - see docs/toolchain.md.
+    int record_fps = Option("-record", 30);
+    if (record_fps) CreateDirectoryA("frames", 0);
 #endif
     window_class.style = CS_OWNDC; window_class.lpfnWndProc = WindowProcedure;
     window_class.hInstance = GetModuleHandleA(0); window_class.lpszClassName = "in4k.particles";
@@ -301,6 +319,7 @@ static int Run(void) {
 #ifdef DEBUG
         frame++;
         if (shot_frames) { delta = 1.f / 60.f; now = (float)frame * delta * (float)steps; }
+        if (record_fps) { delta = 1.f / (float)record_fps; now = (float)frame * delta; }
 #endif
 
         glUseProgram_(simulation);
@@ -341,8 +360,14 @@ static int Run(void) {
         glDrawArrays(GL_POINTS, 0, PARTICLE_COUNT);
 #ifdef DEBUG
         // Before the swap: the back buffer is undefined afterwards.
-        if (shot_frames && frame >= shot_frames) { Capture(width, height); break; }
-        if (live_seconds && now >= (float)live_seconds) { Capture(width, height); break; }
+        if (shot_frames && frame >= shot_frames) { Capture("shot.bmp", width, height); break; }
+        if (live_seconds && now >= (float)live_seconds) { Capture("shot.bmp", width, height); break; }
+        if (record_fps) {
+            char path[32];
+            FormatFrameName(path, frame);
+            Capture(path, width, height);
+            if (now >= END_SECONDS) break;
+        }
 #endif
         SwapBuffers(device_context);
     }
