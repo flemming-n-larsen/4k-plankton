@@ -53,13 +53,19 @@ const vec3 PLANKTON[6] = vec3[6](
     vec3(.82, .68, .20)   // faint yellow - diatom gold
 );
 
-// The camera's free-swim orbit radius. A particle on the containment shell
-// (radius .9 in particles.comp.glsl) projects to .9 * focal / ORBIT in NDC
-// height, so 1.5 puts the sphere just past the top and bottom edges and the
-// cluster fills the frame; the screen is wider than tall, so the sides keep a
-// small margin. Also the reference depth for the distance fade below, which
-// keeps overall brightness where it was before the camera moved in.
-#define ORBIT 1.5
+// The camera's free-swim orbit radius, kept inside the containment shell
+// (radius .9 in particles.comp.glsl) so the camera swims within the swarm
+// rather than looking at it from outside. That is what fills the corners: from
+// outside, however close, the shell still projects as a silhouette, and a ray
+// toward a corner only grazes it, so the corners stay empty no matter how far
+// the camera dollies in. From inside, every ray exits through the swarm and
+// there is no edge anywhere on screen. It also puts the whole cluster within
+// ~1.4 of the camera, so the depth absorption below barely engages and the
+// creature colours stay saturated. .5 rather than closer still: this is also
+// the radius of the circle the camera travels, and a smaller one leaves too
+// little parallax for the drift to read. Doubles as the reference depth of the
+// distance fade, so brightness does not track the camera distance.
+#define ORBIT .5
 
 void main() {
     vec4 particle = particles[gl_VertexID].position;
@@ -67,11 +73,12 @@ void main() {
     float reveal = RevealBlend(t);
     float azimuth = mix(t * .13, 0., reveal);
     float elevation = mix(sin(t * .07) * .5, 0., reveal);
-    // Dollies in from the free-swim orbit radius to 1.3 as the word forms:
-    // at that distance and the .8 word scale in particles.comp.glsl, the word
+    // Pulls back out of the swarm, from ORBIT to 1.3, as the word forms: at
+    // that distance and the .8 word scale in particles.comp.glsl, the word
     // fills the frame horizontally (its 4-letter aspect ratio is much wider
     // than the screen's, so it is always width-bound, with room left above
-    // and below).
+    // and below). The camera has to leave the cluster to read the word at all,
+    // so the reveal is a retreat from the plankton rather than a push in.
     vec3 eye = vec3(sin(azimuth) * cos(elevation), sin(elevation), cos(azimuth) * cos(elevation)) * mix(ORBIT, 1.3, reveal);
     vec3 forward = normalize(-eye);
     vec3 right = normalize(cross(forward, vec3(0., 1., 0.)));

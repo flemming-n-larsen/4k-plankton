@@ -202,13 +202,26 @@ Three decisions are worth recording:
   box would instead put a minimum-image test inside the O(n^2) loop, costing
   both bytes and time in the hottest code, and it pops at the box faces.
 
-The camera watches the cluster from `ORBIT` in `particles.vert.glsl`, set so the
-cluster fills the frame rather than floating in empty water: a particle on the
-containment shell projects to `radius * focal / ORBIT` in NDC height, which at
-`ORBIT` 1.5 and focal 1.7 puts the outermost particles just past the top and
-bottom edges. The 16:9 frame is wider than it is tall, so the sides keep a small
-margin. `ORBIT` is also the reference depth of the per-particle distance fade,
-so moving the camera in or out does not change overall brightness.
+**The camera swims inside the cluster.** `ORBIT` in `particles.vert.glsl` is the
+radius of the camera's free-swim path, and at .5 it sits well within the .9
+containment shell. This is what fills the frame with creatures. From outside the
+shell - at any distance, however close - the cluster still projects as a
+silhouette, and a ray toward a screen corner only grazes that silhouette, so the
+corners stay empty however far the camera dollies in; dollying just drags the
+empty band outward with it. From inside, every ray exits through the swarm and
+there is no edge anywhere on screen. It also brings the whole cluster within
+about 1.4 of the camera, so the depth absorption barely engages and the creature
+colours stay saturated. `ORBIT` is not pushed closer than .5 because it is also
+the radius of the circle the camera travels, and a smaller one leaves too little
+parallax for the drift to read. It doubles as the reference depth of the
+per-particle distance fade, so overall brightness does not track camera distance.
+
+A box-shaped containment volume would be the other way to reach the corners, and
+it would light them more evenly, since a ray toward a corner passes through the
+full depth of a box rather than grazing a sphere. It is rejected because a
+world-axis-aligned box shows flat faces and straight silhouette edges that sweep
+across frame as the camera orbits - it reads as a tank rather than open water -
+and it would flatten cells against the faces and pile them in the corners.
 
 ### NUTS formation
 
@@ -217,9 +230,11 @@ easing over 6 seconds (`REVEAL_EASE`), the cluster dissolves into the word NUTS
 and stays formed for the rest of the run - a finale rather than a recurring
 event. The same `RevealBlend` timeline constants are duplicated in
 `particles.comp.glsl` (which moves the particles) and `particles.vert.glsl`
-(which eases the camera to a front-on view over the same seconds and dollies
-in from the free-swim orbit radius `ORBIT` to 1.3), with a comment on each marking
-them as needing to match. The word is scaled and the dolly-in distance tuned
+(which eases the camera to a front-on view over the same seconds and pulls it
+back out of the swarm, from `ORBIT` to 1.3), with a comment on each marking
+them as needing to match. The camera has to leave the cluster for the word to be
+legible at all, so the reveal is a retreat from the plankton rather than a push
+in. The word is scaled and the pull-back distance tuned
 together so the finished word fills about 85% of the frame's width with a
 comfortable margin at both 1920x1080 and 1280x720; height is necessarily far
 less full, since the word's 4-letter aspect ratio is much wider than the
