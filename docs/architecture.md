@@ -116,7 +116,7 @@ The project supports runtime-generated audio instead of embedding a WAV, MP3, or
 
 The first audio milestone is a synthesized ocean ambience, matching the underwater visuals rather than a musical score. It lives in its own translation unit, `src/audio.c` / `src/audio.h`, keeping the audio subsystem's boundary with platform and graphics code visible in the source layout rather than only in comments.
 
-`AudioStart()` synthesizes a loopable buffer once at startup and plays it through `PlaySoundA` with `SND_LOOP`. There is no stop call: the intro ends by exiting the process, which stops playback anyway, so a teardown function would only cost bytes. `mmsystem.h` is excluded by `WIN32_LEAN_AND_MEAN`, so `PlaySoundA` is declared by hand rather than pulling in that header, matching the rest of the codebase's style. This satisfies the swappable-backend part of the audio boundary below; a stable playback position for visual sync is not implemented, since nothing in the intro currently needs to react to the audio.
+`AudioStart()` synthesizes the whole run into one buffer at startup and plays it through `PlaySoundA` as a single shot, not a loop. There is no stop call: the intro ends by exiting the process, which stops playback anyway, so a teardown function would only cost bytes. `mmsystem.h` is excluded by `WIN32_LEAN_AND_MEAN`, so `PlaySoundA` is declared by hand rather than pulling in that header, matching the rest of the codebase's style. This satisfies the swappable-backend part of the audio boundary below; a stable playback position for visual sync is not implemented, since nothing in the intro currently needs to react to the audio.
 
 The synthesis itself is a small DSP loop, not a sample or a tracker song:
 
@@ -125,8 +125,9 @@ The synthesis itself is a small DSP loop, not a sample or a tracker song:
 - The loudness envelope eases between random waypoints roughly two seconds apart (smoothstep interpolation via the shared `Waypoint` helper), giving slow, full-range swells rather than a constant level.
 - A second, slower waypoint (roughly six seconds apart) eases the amount of foam mixed in, so the ambience's brightness itself drifts between calmer and hissier over time.
 - The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp, so loud swells round off instead of clipping.
-- The loop's tail is crossfaded into its head before use, so playback has no click at the wrap. The direction matters: playback wraps from the last sample back to sample 0, so sample 0 has to continue from the last one. The blend therefore *starts* at the run's continuation past the loop point and eases back to the run's own opening. Blending the other way leaves the original opening at sample 0, which does not continue from anything, and the wrap clicks once per loop.
-- Generation writes 16-bit samples straight into the block handed to the player. The crossfade is the only thing that ever needed a wider intermediate, and it works just as well on the samples, so there is no float scratch buffer and no second allocation.
+- A scripted macro envelope over the top of those random swells follows the picture: quiet and close while the water is deep, opening out across the ascent, surging as the particles let go at thirty seconds, settling again over the held word, and fading with the image between forty-five and fifty-three seconds. The surge opens the foam further than the level alone does, so the reveal arrives as a wash of white water rather than merely louder surf. Measured per-second RMS runs about 11 through the deep opening, 38 by second twenty-five, peaks at 62 during the migration and settles to 26 over the word. These windows are a fifth copy of the visual timeline and must be kept in step by hand.
+- The buffer is one shot covering the whole run rather than a short loop, which is what allows an envelope written against the clock, and it needs no crossfade at all. It is generated longer than `END_SECONDS` because audio plays in real time while the visuals are driven by `sim_time`: a machine that cannot hold 60 Hz stretches the picture against the sound, and the margin keeps the sound from running out first. A looped buffer was immune to that and this one is not, which is the price of having anything happen in the audio at a specific moment.
+- Generation writes 16-bit samples straight into the block handed to the player, with no float scratch buffer and no second allocation.
 - The 44-byte RIFF header is a table of eleven literal little-endian words copied into place, rather than a packed struct filled in field by field.
 - Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
 
@@ -252,6 +253,21 @@ Three decisions are worth recording:
   box would instead put a minimum-image test inside the O(n^2) loop, costing
   both bytes and time in the hottest code, and it pops at the box faces.
 
+**A tight core over a faint halo, not one soft blob.** The sprite falloff is an
+eighth-power term carrying most of the light with a squared term as a wide halo,
+rather than the squared term alone. A squared falloff is still at half its peak
+54% of the way out, so sixteen thousand of them read as fog and the cell
+structure the simulation produces is invisible; the eighth power reaches half
+peak at 29%. The two weights are chosen to hold the total emitted light where the
+single term had it - radially the squared term integrates to 1/6 and the eighth
+to 1/18 - so the change sharpens the image without altering its exposure, which
+measures as a mean frame luminance within 0.2% of the single-term version.
+
+Sharpening the profile is what makes this affordable at all. The obvious fix,
+shrinking the sprites, would undo the viewport-relative sizing below and bring
+back the half-empty sea; concentrating the same light into a core costs nothing
+in coverage.
+
 **Sprite size scales entirely with viewport height.** Both `gl_PointSize` and
 its upper clamp in `particles.vert.glsl` are expressed as fractions of the
 viewport height uniform, so
@@ -283,6 +299,28 @@ full depth of a box rather than grazing a sphere. It is rejected because a
 world-axis-aligned box shows flat faces and straight silhouette edges that sweep
 across frame as the camera orbits - it reads as a tank rather than open water -
 and it would flatten cells against the faces and pile them in the corners.
+
+### The ascent
+
+The free-swimming stretch is the majority of the run, and on its own it does not
+develop: the orbit rate is constant, the elevation wobble is constant, and
+without something changing, thirty seconds of a drifting cluster reads as a
+holding pattern rather than a build. The ascent is what develops. Over seconds 4
+to 40 the scene rises from deep water toward the surface, so the light grows, the
+caustics and god rays strengthen, and the plankton recover the colour that depth
+was absorbing. The word then forms in bright, near-surface water.
+
+The camera does not actually travel. Moving the eye upward would drag the bounded
+swarm off centre, and there is nothing above the cluster to rise past. The ascent
+is carried entirely by light and by the bubbles below - which is also why the
+bubbles are not decoration: without something streaming past, brighter water
+alone does not read as motion.
+
+In `background.frag.glsl` every lit term already scaled with screen height, so
+the ascent folds into that single factor and drives the depth gradient, the
+caustics and the rays at once. `particles.vert.glsl` carries its own copy, easing
+off the distance absorption over the same seconds. Measured mean frame luminance
+runs 25.7 at five seconds, 44.7 at twenty and 76.6 at forty.
 
 ### NUTS formation
 
@@ -341,6 +379,17 @@ rather than blending in a residual of it, since the extra density of points
 compressed onto a thin curve would otherwise amplify any residual into
 clumps.
 
+**The reveal accents itself.** `particles.vert.glsl` scales each particle's
+brightness by its own speed, read from the velocity half of the buffer that the
+vertex shader otherwise never touches. For the six seconds of the migration every
+particle is moving hard, so the swarm surges and then decays as it settles into
+the letters. This is deliberately not a scripted flash: it costs one buffer read,
+it lands exactly on the timeline without another constant to keep in step, and it
+resolves on its own as the particles stop. Mean frame luminance runs 55 just
+before the reveal, peaks at 85 as the word lands, and settles back to 78. While
+the cluster is merely drifting it reads as a faint twinkle on the fastest
+cells.
+
 ### Background and palette
 
 A third program draws the background before the points, giving an underwater
@@ -361,6 +410,24 @@ fixed-function vertex pipeline, which is exactly what a
 `gl_Position = gl_Vertex` pass-through would have done. The geometry is a single
 `glRecti(-1, -1, 1, 1)` covering clip space, rather than `glBegin` / three
 `glVertex2f` / `glEnd` - one import and one call instead of three and five.
+
+Rising bubbles are drawn in the same pass, as two parallax layers of a hashed
+cell grid scrolling upward. Both layers scroll by the same rate, so the coarser
+one drifts more slowly in screen units purely because its cells are larger - the
+parallax comes free from the scale rather than from a per-layer rate. Screen
+space is sound here specifically because the camera never rolls: `up` is derived
+from world up, so screen-vertical is world-vertical. The grid is built on an
+aspect-corrected copy of the screen coordinate, without which the cells would be
+16:9 wide and every bubble a visible ellipse.
+
+Each bubble is an annulus rather than a filled disc. A filled blob reads as
+out-of-focus dust; a bright rim around a dark middle reads as a bubble catching
+the light from above. Only cells hashing above a threshold carry one, so the
+water is not a uniform lattice, and a second hash decorrelates vertical placement
+from size so the layers do not show their rows. Density is the whole design
+problem here: at the obvious settings the frame fills with bubbles that compete
+with the plankton for attention, and the layer count and threshold exist to keep
+them a background presence.
 
 The particles keep their plankton colours through the reveal - nothing brightens
 or desaturates when the word forms. Raising luminance for legibility was tried

@@ -84,8 +84,22 @@ void main() {
     c = PLANKTON[int(particle.w)];
 
     // Light absorption with distance: far particles pull toward deep-water blue,
-    // the way colour drops out of real water with depth.
-    c = mix(c, vec3(.02, .08, .15), clamp((view.z - 1.) / 2.5, 0., 1.) * .5);
+    // the way colour drops out of real water with depth. It eases off as the
+    // scene rises toward the surface over seconds 4 to 40, so the plankton
+    // regain saturation on the way up; must match the ascent in
+    // background.frag.glsl.
+    c = mix(c, vec3(.02, .08, .15),
+            clamp((view.z - 1.) / 2.5, 0., 1.) * (.75 - .25 * smoothstep(4., 40., t)));
+
+    // Brightness from speed, read straight out of the velocity half of the
+    // buffer that nothing else in this shader touches. This is the reveal
+    // accent, and it costs one buffer read rather than a scripted flash: for
+    // the six seconds the particles are migrating into the word every one of
+    // them is moving hard, so the whole swarm surges and then decays as it
+    // settles into the letters - an event that arrives and resolves on its own,
+    // exactly on the timeline, with no constant to keep in step. While the
+    // cluster is just drifting it reads as a faint twinkle on the fastest cells.
+    c *= 1. + 1.5 * length(v[gl_VertexID * 2 + 1].xyz);
     // Fades in from black slowly, so the procedural background (depth gradient,
     // caustics, god rays) reads clearly before the particles compete for
     // attention, then fades back to black a few seconds after NUTS is fully

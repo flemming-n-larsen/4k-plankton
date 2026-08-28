@@ -9,16 +9,14 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 #define SND_ASYNC 1
 #define SND_NODEFAULT 2
 #define SND_MEMORY 4
-#define SND_LOOP 8
 
 #define SAMPLE_RATE 22050
-// Kept longer than the couple of seconds a single swell takes, so the loop
-// itself does not feel repetitive.
-#define LOOP_SECONDS 20
-#define LOOP_SAMPLES (SAMPLE_RATE * LOOP_SECONDS)
-// Blended into the loop start so the seam is inaudible; see GenerateOcean.
-#define CROSSFADE_SAMPLES (SAMPLE_RATE / 6)
-#define TOTAL_SAMPLES (LOOP_SAMPLES + CROSSFADE_SAMPLES)
+// One buffer covering the whole run rather than a short loop, so the envelope
+// can be written against the clock and put an event under the reveal. Longer
+// than END_SECONDS in src/intro.c, since a machine that cannot hold 60 Hz
+// stretches the visuals against the audio, which always plays in real time.
+#define RUN_SECONDS 75
+#define RUN_SAMPLES (SAMPLE_RATE * RUN_SECONDS)
 
 // Explicit, fully reproducible seed - never derived from the clock, so the
 // ocean texture is identical on every run. Change it to hear a different one.
@@ -38,7 +36,7 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // fifteen assignments and a four-character tag helper.
 static const unsigned wav_header[11] = {
     0x46464952,                 // "RIFF"
-    36 + LOOP_SAMPLES * 2,      // bytes after this field
+    36 + RUN_SAMPLES * 2,       // bytes after this field
     0x45564157,                 // "WAVE"
     0x20746d66,                 // "fmt "
     16,                         // format chunk size
@@ -47,7 +45,7 @@ static const unsigned wav_header[11] = {
     SAMPLE_RATE * 2,            // byte rate
     0x00100002,                 // block align 2, 16 bits per sample
     0x61746164,                 // "data"
-    LOOP_SAMPLES * 2
+    RUN_SAMPLES * 2
 };
 
 static unsigned int rng_state;
@@ -72,22 +70,27 @@ static float NextNoise(void) {
 static float waypoint_from[2], waypoint_to[2];
 static int waypoint_counter[2] = { SWELL_SAMPLES, TEXTURE_SAMPLES };
 
+// GLSL's smoothstep, which the envelope below leans on as heavily as the
+// shaders do. Waypoint was already computing one inline.
+static float Smoothstep(float edge0, float edge1, float x) {
+    float f = (x - edge0) / (edge1 - edge0);
+    f = f < 0.f ? 0.f : f > 1.f ? 1.f : f;
+    return f * f * (3.f - 2.f * f);
+}
+
 // Eases between two waypoints spaced period samples apart, smoothstepped.
 static float Waypoint(int slot, int period) {
-    float fraction, eased;
     if (waypoint_counter[slot] >= period) {
         waypoint_counter[slot] = 0;
         waypoint_from[slot] = waypoint_to[slot];
         waypoint_to[slot] = NextNoise() * .5f + .5f;
     }
-    fraction = (float)waypoint_counter[slot]++ / (float)period;
-    eased = fraction * fraction * (3.f - 2.f * fraction);
-    return waypoint_from[slot] + (waypoint_to[slot] - waypoint_from[slot]) * eased;
+    return waypoint_from[slot] + (waypoint_to[slot] - waypoint_from[slot])
+         * Smoothstep(0.f, (float)period, (float)waypoint_counter[slot]++);
 }
 
-// Synthesizes a seamless, loopable ocean ambience directly into the PCM block
-// the player is handed - no float scratch buffer, since the only thing that
-// needed one was the crossfade, which works just as well on the samples.
+// Synthesizes the whole run's ocean ambience directly into the PCM block the
+// player is handed - one pass, no float scratch buffer, no second allocation.
 //
 // The amplitude envelope eases between random waypoints a couple of seconds
 // apart, so swells rise and fall with real amplitude rather than staying
@@ -105,11 +108,15 @@ static float Waypoint(int slot, int period) {
 // foam-to-surf balance; that amount itself drifts slowly between quieter and
 // hissier waypoints, so the brightness of the ambience varies over time.
 //
-// The last CROSSFADE_SAMPLES of a longer run are blended into the loop start
-// so the wrap has no audible click.
+// Over the run the ambience follows the picture: quiet and close while the
+// water is deep, opening out as the scene rises, surging as the particles let
+// go at 30 seconds and settling again over the held word, then fading with the
+// image. Nothing here is a sample or a sequence - the swells are still the
+// random waypoints, with a scripted macro envelope over the top. Because the
+// buffer is one shot rather than a loop, it needs no crossfade at all.
 static void* GenerateOcean(void) {
     short* pcm;
-    void* block = VirtualAlloc(0, 44 + TOTAL_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
+    void* block = VirtualAlloc(0, 44 + RUN_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, previous_white = 0.f;
     if (!block) return 0;
@@ -117,10 +124,18 @@ static void* GenerateOcean(void) {
     pcm = (short*)((char*)block + 44);
 
     rng_state = AUDIO_SEED;
-    for (i = 0; i < TOTAL_SAMPLES; i++) {
+    for (i = 0; i < RUN_SAMPLES; i++) {
         float white = NextNoise();
         float white2 = NextNoise();
         float shaped, texture, foam_raw, sample;
+        // Seconds into the run, which is what the macro envelope is written
+        // against. These four windows must stay in step with the shaders: 6..30
+        // is the ascent, 30 is when the particles let go, and 45..53 is the
+        // master fade.
+        float second = (float)i * (1.f / SAMPLE_RATE);
+        float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
+        float surge = Smoothstep(28.f, 31.5f, second) * (1.f - Smoothstep(33.f, 42.f, second));
+        float macro = (arc + .6f * surge) * (1.f - Smoothstep(45.f, 53.f, second));
         surf1 += (white - surf1) * .035f;
         surf2 += (surf1 - surf2) * .035f;
         shaped = Waypoint(0, SWELL_SAMPLES);
@@ -131,18 +146,13 @@ static void* GenerateOcean(void) {
         foam1 += (foam_raw - foam1) * .16f;
         foam2 += (foam1 - foam2) * .16f;
 
-        sample = surf2 * (.25f + .7f * shaped)
-               + foam2 * shaped * shaped * (.72f + 2.88f * texture);
+        // The surge opens the foam further than the level alone would, so the
+        // reveal arrives as a wash of white water rather than just louder surf.
+        sample = (surf2 * (.25f + .7f * shaped)
+               + foam2 * shaped * shaped * (.72f + 2.88f * texture) * (1.f + 1.8f * surge)) * macro;
         // Soft-knee saturation instead of a hard clamp: maps all of R into
         // (-1,1) smoothly, so loud swells round off instead of clipping.
         pcm[i] = (short)(int)(sample / (1.f + (sample < 0.f ? -sample : sample)) * 30000.f);
-    }
-    // The loop plays samples 0..LOOP_SAMPLES-1, so sample 0 has to continue
-    // from sample LOOP_SAMPLES-1: the blend therefore starts at the run's
-    // continuation past the loop and eases back to the run's own opening.
-    for (i = 0; i < CROSSFADE_SAMPLES; i++) {
-        float mix = (float)i / (float)CROSSFADE_SAMPLES;
-        pcm[i] = (short)(int)(pcm[LOOP_SAMPLES + i] * (1.f - mix) + pcm[i] * mix);
     }
     return block;
 }
@@ -154,10 +164,10 @@ void AudioStart(void) {
     // Written so the generated sound can be reviewed outside the running
     // intro; not part of the Compo path.
     {
-        DWORD written; unsigned size = 44 + LOOP_SAMPLES * 2;
+        DWORD written; unsigned size = 44 + RUN_SAMPLES * 2;
         HANDLE file = CreateFileA("ocean.wav", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         if (file != INVALID_HANDLE_VALUE) { WriteFile(file, wav, size, &written, 0); CloseHandle(file); }
     }
 #endif
-    PlaySoundA(wav, 0, SND_ASYNC | SND_LOOP | SND_MEMORY | SND_NODEFAULT);
+    PlaySoundA(wav, 0, SND_ASYNC | SND_MEMORY | SND_NODEFAULT);
 }
