@@ -194,6 +194,20 @@ Three decisions are worth recording:
   generated from a hash inside the shader, costing zero bytes. `SEED` in
   `particles.comp.glsl` selects a different but fully reproducible attractor;
   nothing in the intro is seeded from the clock, so every run is identical.
+- **The simulation runs on a fixed timestep.** `Run()` accumulates real time but
+  integrates in constant `SIM_STEP` (1/60 s) increments, and every shader
+  uniform is driven by `sim_time` rather than the wall clock. Feeding the real
+  frame delta to the compute shader instead makes the run frame-rate dependent,
+  and because Particle Life is chaotic that is not a subtle difference: the same
+  binary produces a visibly different cluster on a 60 Hz and a 144 Hz machine,
+  which is unacceptable for a compo where the intro is seen once on unfamiliar
+  hardware. The step count is held as an integer with `sim_time` derived from it,
+  not accumulated by repeated addition, since the accumulated float drifts
+  against a multiplied time and costs a step at the comparison boundary.
+  `MAX_CATCHUP` bounds the catch-up loop, so a machine that cannot keep up plays
+  the same intro slightly slowly rather than a different one. Verified by
+  comparing captures from the synthetic fixed-rate `-shot` path against the
+  wall-clock `-live` path at the same time index: byte-identical.
 - **A type always attracts itself.** With a purely random matrix, 3D Particle
   Life settles into a uniform gas: there is too much room for cohesion to win.
   Biasing the diagonal positive is what makes distinct cells form.
@@ -201,6 +215,17 @@ Three decisions are worth recording:
   force applied once per particle, outside the pair loop. The classic periodic
   box would instead put a minimum-image test inside the O(n^2) loop, costing
   both bytes and time in the hottest code, and it pops at the box faces.
+
+**Sprite size scales entirely with viewport height.** Both `gl_PointSize` and
+its upper clamp in `particles.vert.glsl` are expressed as fractions of `r.y`, so
+1080p, 720p and any downscaled capture render the same image - verified by
+comparing mean luminance at a fixed time index across all three, which agree to
+within 0.1%. The clamp exists to stop a particle drifting close to the camera
+from filling the screen with a single sprite, but as an absolute pixel constant
+it capped *every* sprite at the compo resolutions: the camera sits inside the
+swarm, so the whole cluster is near and every sprite wants to be larger than the
+cap. The effect was a sea that looked half empty on anything above 540p while
+looking correct in downscaled test captures.
 
 **The camera swims inside the cluster.** `ORBIT` in `particles.vert.glsl` is the
 radius of the camera's free-swim path, and at .5 it sits well within the .9
@@ -243,10 +268,15 @@ less full, since the word's 4-letter aspect ratio is much wider than the
 The whole scene also fades: in from black over the first 8 seconds
 (`FADE_IN_END`) - slow enough that the procedural underwater background
 (depth gradient, caustics, god rays) reads clearly before the particles
-brighten to full strength - and back to black starting 5 seconds after NUTS
-is fully formed (`FADE_OUT_START`, derived from `REVEAL_START + REVEAL_EASE +
-5`), over 4 seconds (`FADE_OUT_DURATION`), ending the intro on the held word
-rather than an abrupt cut. `MasterFade` computes this and is duplicated a
+brighten to full strength - and back to black starting 9 seconds after the
+reveal ease ends (`FADE_OUT_START`, derived from `REVEAL_START + REVEAL_EASE +
+9`), over 8 seconds (`FADE_OUT_DURATION`), ending the intro on the held word
+rather than an abrupt cut. The 9 is measured, not guessed: the ease ending is
+not the moment the logo stops moving, because the particles are still damping
+into their targets for another ~3.7 seconds after it. Frame-to-frame motion
+does not fall below noise until about 39.7 seconds, so the fade starts at 45 to
+leave a full 5 seconds of a genuinely settled logo. Timing it from the end of
+the ease instead makes the logo appear to fade the moment it arrives. `MasterFade` computes this and is duplicated a
 third time in `background.frag.glsl`, folded multiplicatively into
 `particles.vert.glsl`'s `tint` and into the background's final colour, rather
 than added as a separate overlay quad.
@@ -254,8 +284,8 @@ than added as a separate overlay quad.
 The Compo build then exits on its own, rather than sitting on the black
 screen indefinitely until the operator intervenes: `src/intro.c` holds a
 fourth copy of this timeline, `END_SECONDS`, set to the moment the fade
-reaches full black (`REVEAL_START + REVEAL_EASE + 5 + FADE_OUT_DURATION` = 45
-seconds) plus a further 3-second hold, and breaks the main loop once `now`
+reaches full black (`REVEAL_START + REVEAL_EASE + 9 + FADE_OUT_DURATION` = 53
+seconds) plus a further 3-second hold, and breaks the main loop once `sim_time`
 passes it. This check is compiled out of Debug (`#ifndef DEBUG`), since
 Debug's `-live`/`-shot` diagnostics need to keep running past that point on
 demand.
@@ -269,6 +299,9 @@ matrix and initial positions. Each particle is assigned a point on one stroke
 by hashing its own index (kept well under the argument magnitude where GPU
 `sin()` range reduction stays precise, to avoid aliasing distinct indices
 onto the same output), so the same particle always seeks the same spot;
+a perpendicular jitter of +/-.05 in font units gives each stroke real width,
+enough that the strokes read as solid bodies rather than wires and the
+counters of N, U and S close up;
 during the hold, that force fully replaces the Particle Life pairwise force
 rather than blending in a residual of it, since the extra density of points
 compressed onto a thin curve would otherwise amplify any residual into
@@ -287,6 +320,11 @@ viewport and would otherwise accumulate additively over whatever was left in
 the back buffer from a previous frame; blending is re-enabled for the points
 drawn on top. This also removes the need for `glClear` - the background
 already overwrites every pixel.
+
+The particles keep their plankton colours through the reveal - nothing brightens
+or desaturates when the word forms. Raising luminance for legibility was tried
+and dropped: mixing toward white reads as a white logo rather than a logo made
+of creatures, which is the point of the shot.
 
 The particle palette is a literal six-entry table in `particles.vert.glsl`,
 `PLANKTON`, indexed directly by the particle's type - one colour per type, so

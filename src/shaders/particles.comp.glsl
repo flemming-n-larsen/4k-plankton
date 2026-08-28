@@ -96,7 +96,7 @@ vec2 StrokePoint(int stroke, float u, float jitter) {
 // distinct values.
 vec3 LetterTarget(float i) {
     int stroke = int(hash(i * 1.3 + 77.) * float(FONT_STROKES));
-    vec2 local = StrokePoint(stroke, hash(i * 2.9 + 12.), (hash(i * 1.9 + 41.) - .5) * .05);
+    vec2 local = StrokePoint(stroke, hash(i * 2.9 + 12.), (hash(i * 1.9 + 41.) - .5) * .1);
     // .8: scaled up together with the camera dolly-in in particles.vert.glsl
     // so the finished word fills as much of the frame as its wide, 4-letter
     // aspect ratio allows without clipping horizontally.

@@ -7,12 +7,23 @@
 #define WORKGROUP_SIZE 256
 
 // When the run should end, in seconds: REVEAL_START (30) + REVEAL_EASE (6) +
-// the 5-second hold + FADE_OUT_DURATION (4) from particles.vert.glsl's
-// MasterFade, i.e. the moment the screen reaches full black, plus a further
-// 3-second hold so the ending reads as deliberate rather than the window
-// just sitting there. Must be kept in step with those shader constants by
-// hand, same as the other timeline values duplicated across files.
-#define END_SECONDS 48.f
+// the 9-second hold on the formed logo + FADE_OUT_DURATION (8) from
+// particles.vert.glsl's MasterFade, i.e. the moment the screen reaches full
+// black, plus a further 3-second hold so the ending reads as deliberate rather
+// than the window just sitting there. Must be kept in step with those shader
+// constants by hand, same as the other timeline values duplicated across files.
+#define END_SECONDS 56.f
+
+// The simulation runs at a fixed 1/60 s step so the run is reproducible on any
+// machine; see the integration loop in Run(). MAX_CATCHUP bounds how many steps
+// one frame may run when the renderer falls behind, so a slow machine cannot
+// stall in an ever-growing catch-up loop - it plays slightly slow instead.
+#define SIM_STEP (1.f / 60.f)
+#ifdef DEBUG
+#define MAX_CATCHUP 64
+#else
+#define MAX_CATCHUP 4
+#endif
 
 typedef char GLchar;
 typedef int GLsizeiptr;
@@ -231,11 +242,11 @@ static int Run(void) {
     HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
     GLuint simulation, rendering, background, buffer;
     GLint delta_location, simulation_time_location, time_location, resolution_location, background_time_location, background_resolution_location;
-    RECT client; int width; int height; DWORD start_ticks; float previous; float now; float delta;
+    RECT client; int width; int height; DWORD start_ticks; float now; float sim_time; int sim_steps; int step;
 #ifdef DEBUG
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
     int forced_width = Option("-width", 0), forced_height = Option("-height", 0);
-    int steps = Option("-steps", 1), step;
+    int steps = Option("-steps", 1);
     // "-record<fps>" (e.g. "-record30") captures every frame of a full,
     // deterministic run to frames/frameNNNNN.bmp at that frame rate, for
     // stitching into a video externally - see docs/toolchain.md.
@@ -305,37 +316,44 @@ static int Run(void) {
     // Subtract ticks as integers before converting: GetTickCount grows to
     // billions on a long-running machine, where float32 can no longer resolve a
     // single frame.
-    start_ticks = GetTickCount(); previous = 0.f;
+    start_ticks = GetTickCount(); sim_steps = 0; sim_time = 0.f;
     for (;;) {
         while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) { if (message.message == WM_QUIT) goto done; TranslateMessage(&message); DispatchMessageA(&message); }
         if (GetAsyncKeyState(VK_ESCAPE)) break;
         now = (float)(GetTickCount() - start_ticks) * .001f;
 #ifndef DEBUG
-        if (now >= END_SECONDS) break;
+        if (sim_time >= END_SECONDS) break;
 #endif
-        delta = now - previous; previous = now;
-        if (delta > 1.f / 30.f) delta = 1.f / 30.f;
-        if (delta <= 0.f) delta = .001f;
 #ifdef DEBUG
         frame++;
-        if (shot_frames) { delta = 1.f / 60.f; now = (float)frame * delta * (float)steps; }
-        if (record_fps) { delta = 1.f / (float)record_fps; now = (float)frame * delta; }
+        if (shot_frames) now = (float)frame * (float)steps * SIM_STEP;
+        if (record_fps) now = (float)frame / (float)record_fps;
 #endif
 
+        // Fixed timestep, not the wall-clock frame delta. Particle Life is
+        // chaotic, so integrating with whatever delta a machine happened to
+        // produce made the cluster evolve differently on every refresh rate -
+        // same binary, different-looking intro. Stepping a constant SIM_STEP
+        // makes the number of steps taken by a given wall-clock time exactly
+        // floor(now / SIM_STEP) everywhere, so the run is reproducible. The
+        // count is kept as an integer and sim_time derived from it, rather than
+        // accumulating sim_time by repeated addition: the accumulated float
+        // drifts against a multiplied time, which flips the comparison below at
+        // the boundary and costs a step.
+        // sim_time, not the wall clock, drives every shader uniform below, so
+        // a machine that cannot keep up plays the same intro slightly slowly
+        // rather than a different one.
         glUseProgram_(simulation);
-        glUniform1f_(simulation_time_location, now);
-#ifdef DEBUG
-        for (step = 0; step < steps; step++) {
-#endif
-        glUniform1f_(delta_location, delta);
-        glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
-        glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
-        glUniform1f_(delta_location, -delta);
-        glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
-        glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
-#ifdef DEBUG
+        for (step = 0; step < MAX_CATCHUP && (float)(sim_steps + 1) * SIM_STEP <= now; step++) {
+            sim_time = (float)++sim_steps * SIM_STEP;
+            glUniform1f_(simulation_time_location, sim_time);
+            glUniform1f_(delta_location, SIM_STEP);
+            glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
+            glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
+            glUniform1f_(delta_location, -SIM_STEP);
+            glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
+            glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
         }
-#endif
 
         GetClientRect(window, &client); width = client.right - client.left; height = client.bottom - client.top;
         glViewport(0, 0, width, height);
@@ -345,7 +363,7 @@ static int Run(void) {
         // for the additive point sprites drawn over it.
         glDisable(GL_BLEND);
         glUseProgram_(background);
-        glUniform1f_(background_time_location, now);
+        glUniform1f_(background_time_location, sim_time);
         glUniform2f_(background_resolution_location, (float)width, (float)height);
         glBegin(GL_TRIANGLES);
         glVertex2f(-1, -1);
@@ -355,18 +373,18 @@ static int Run(void) {
         glEnable(GL_BLEND);
 
         glUseProgram_(rendering);
-        glUniform1f_(time_location, now);
+        glUniform1f_(time_location, sim_time);
         glUniform2f_(resolution_location, (float)width, (float)height);
         glDrawArrays(GL_POINTS, 0, PARTICLE_COUNT);
 #ifdef DEBUG
         // Before the swap: the back buffer is undefined afterwards.
         if (shot_frames && frame >= shot_frames) { Capture("shot.bmp", width, height); break; }
-        if (live_seconds && now >= (float)live_seconds) { Capture("shot.bmp", width, height); break; }
+        if (live_seconds && sim_time >= (float)live_seconds) { Capture("shot.bmp", width, height); break; }
         if (record_fps) {
             char path[32];
             FormatFrameName(path, frame);
             Capture(path, width, height);
-            if (now >= END_SECONDS) break;
+            if (sim_time >= END_SECONDS) break;
         }
 #endif
         SwapBuffers(device_context);

@@ -31,8 +31,8 @@ float RevealBlend(float time) {
 // formed, ending the intro on the held word rather than an abrupt cut. Must
 // match the copy in background.frag.glsl.
 #define FADE_IN_END 8.
-#define FADE_OUT_START (REVEAL_START + REVEAL_EASE + 5.)
-#define FADE_OUT_DURATION 4.
+#define FADE_OUT_START (REVEAL_START + REVEAL_EASE + 9.)
+#define FADE_OUT_DURATION 8.
 
 float MasterFade(float time) {
     return min(smoothstep(0., FADE_IN_END, time),
@@ -89,18 +89,19 @@ void main() {
 
     float focal = 1.7;
     gl_Position = vec4(view.x * focal * r.y / r.x, view.y * focal, view.z * .01, view.z);
-    // Scaled by viewport height, not a pixel constant, so 1080p and 720p match.
-    // The upper clamp stops a particle drifting near the camera from filling the
-    // screen with one sprite.
-    gl_PointSize = clamp(.022 * focal * r.y / view.z, 1., 18.);
+    // Both the size and its ceiling scale with viewport height, so 1080p, 720p
+    // and any downscaled capture show the same image. The ceiling stops a
+    // particle drifting close to the camera from filling the screen with one
+    // sprite; as an absolute pixel constant it instead capped every sprite at
+    // the compo resolutions - the camera sits inside the swarm, so the whole
+    // cluster is near - and the sea looked half empty on anything above 540p.
+    gl_PointSize = clamp(.022 * focal * r.y / view.z, 1., .033 * r.y);
 
     tint = PLANKTON[int(particle.w)];
 
     // Light absorption with distance: far particles pull toward deep-water blue,
     // the way colour drops out of real water with depth.
     tint = mix(tint, vec3(.02, .08, .15), clamp((view.z - 1.) / 2.5, 0., 1.) * .5);
-    // Brighten toward white while the word is held, for legibility.
-    tint = mix(tint, vec3(1.), reveal * .4);
     tint *= MasterFade(t);
 
     fade = exp(-.55 * (view.z - ORBIT));
