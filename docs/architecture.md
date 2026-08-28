@@ -330,14 +330,21 @@ and stays formed for the rest of the run - a finale rather than a recurring
 event. The same `smoothstep(30., 36., t)` is duplicated in
 `particles.comp.glsl` (which moves the particles) and `particles.vert.glsl`
 (which eases the camera to a front-on view over the same seconds and pulls it
-back out of the swarm, from .5 to 1.3), with a comment on each marking
+back out of the swarm, from .5 to 1.42), with a comment on each marking
 them as needing to match. The camera has to leave the cluster for the word to be
 legible at all, so the reveal is a retreat from the plankton rather than a push
-in. The word is scaled and the pull-back distance tuned
-together so the finished word fills about 85% of the frame's width with a
-comfortable margin at both 1920x1080 and 1280x720; height is necessarily far
-less full, since the word's 4-letter aspect ratio is much wider than the
-16:9 frame.
+in. Height is necessarily far less full than width, since the word's 4-letter
+aspect ratio is much wider than the 16:9 frame.
+
+The pull-back distance is set by how close the word comes to the frame edge. Its
+widest point is the N's left vertical, at -1.30 in world units once the stroke
+jitter is counted. At a distance of 1.3 that projects to -.956 of the frame
+half-width with the camera dead ahead - a 4% margin, and nothing left for the
+camera to move. At 1.42 the same edge sits near -.91 even at the extreme of the
+drift below, which measures as 60 pixels of clear margin on the left and 126 on
+the right at 1280x720 in the worst frame of the hold. It costs about a tenth of
+the word's size and is the difference between a logo with air around it and a
+logo with a letter cut off the side of a projector screen.
 
 The whole scene also fades: in from black over the first 5 seconds, and back to
 black over seconds 45 to 53, which is
@@ -390,6 +397,24 @@ rather than blending in a residual of it, since the extra density of points
 compressed onto a thin curve would otherwise amplify any residual into
 clumps.
 
+**The hold is not a still frame.** Once the reveal completes, both camera angles
+would multiply out to exactly zero and the distance is constant, so with the
+particles settled onto their targets nothing but the background would move for
+the last five seconds before the fade. A much smaller oscillation therefore
+fades in as the free-swim orbit fades out, and the word keeps turning gently
+through the hold.
+
+That residual has to swing around zero rather than be a fraction of the
+free-swim term. Azimuth there is absolute, `t * .13`, so leaving even 4% of it
+would put the camera 10.7 degrees off axis by the time the word lands and still
+climbing - against the word's half-width that spreads the letters across depths
+1.07 to 1.53, a 43% sprite-size difference end to end and a visibly skewed logo.
+At the .045 radians actually used, the spread is about 1.30 to 1.42, which reads
+as the word having some dimension: the N sits nearer than the S and is drawn
+slightly larger. Measured over three seconds of the hold, the word's projected
+width changes by 14 pixels and its centroid by about 4, against 3 and under 1
+for a static camera.
+
 **The reveal accents itself.** `particles.vert.glsl` scales each particle's
 brightness by its own speed, read from the velocity half of the buffer that the
 vertex shader otherwise never touches. For the six seconds of the migration every
@@ -421,6 +446,14 @@ fixed-function vertex pipeline, which is exactly what a
 `gl_Position = gl_Vertex` pass-through would have done. The geometry is a single
 `glRecti(-1, -1, 1, 1)` covering clip space, rather than `glBegin` / three
 `glVertex2f` / `glEnd` - one import and one call instead of three and five.
+
+The shaft pattern is a single angular frequency whose amplitude is modulated by
+a second, much lower one. On its own the single frequency gives nine identical,
+evenly spaced shafts swaying as a rigid fan, which reads as a cog. Adding a
+second fan on top is worse rather than better: where the two cancel they open
+broad dark wedges that look like a seam in the water. Modulating the amplitude
+instead varies the brightness from shaft to shaft and drifts that variation
+along the fan over time, without any shaft ever disappearing.
 
 Rising bubbles are drawn in the same pass, as two parallax layers of a hashed
 cell grid scrolling upward. Both layers scroll by the same rate, so the coarser

@@ -36,10 +36,20 @@ void main() {
     float caustic = pow(abs(sin(q.x * 10. + sin(q.y * 8. + t * .6) * 2.)), 4.);
     colour += caustic * vec3(.6, 1., .9) * .12 * lit;
 
-    // God rays from a sun above the top edge, converging downward.
+    // God rays from a sun above the top edge, converging downward. The shaft
+    // pattern is one angular frequency, which on its own gives nine identical,
+    // evenly spaced shafts swaying as a rigid fan and reads as a cog. A second
+    // fan added on top is worse, not better: where the two cancel it opens
+    // broad dark wedges that look like a seam in the water. Instead a slow,
+    // low-frequency term modulates the amplitude of the existing shafts, so
+    // they differ in brightness and that variation drifts along the fan over
+    // time without any shaft ever disappearing. Its mean is .55, so the
+    // trailing coefficient rises from .5 to hold the overall brightness.
     vec2 sun = q - vec2(.5, 1.15);
-    float rays = pow(abs(sin(atan(sun.x, sun.y) * 9. + sin(t * .3) * .4)), 6.);
-    colour += rays * vec3(.9, 1., .85) * .5 * lit / (1. + dot(sun, sun) * .6);
+    float angle = atan(sun.x, sun.y);
+    float rays = pow(abs(sin(angle * 9. + sin(t * .3) * .4)), 6.)
+               * (.55 + .45 * sin(angle * 3.7 - t * .13));
+    colour += rays * vec3(.9, 1., .85) * .9 * lit / (1. + dot(sun, sun) * .6);
 
     // Rising bubbles: three parallax layers of a hashed cell grid, each
     // scrolling upward. This is what sells the ascent - the light alone says

@@ -35,9 +35,24 @@ void main() {
     // into its front-on view over the same 30..36 second window the particles
     // take to spell the word out.
     float reveal = smoothstep(30., 36., t);
+    // The free-swim orbit fades out as the word forms, and a much smaller
+    // oscillation fades in behind it, so the held word keeps turning gently
+    // instead of stopping dead. Without it the last stretch of the run is a
+    // still frame: both angles would be exactly zero and the distance is
+    // constant, so nothing but the background moves for five seconds.
+    //
+    // The residual has to swing around zero rather than be a fraction of the
+    // free-swim term. Azimuth there is absolute - t * .13 - so leaving even 4%
+    // of it would put the camera 10.7 degrees off axis by the time the word
+    // lands and still climbing; against a word half-width of about 1.24 and a
+    // camera distance of 1.3 that spreads the letters across depths 1.07 to
+    // 1.53, a 43% sprite-size difference end to end and a visibly skewed logo.
+    // At .045 radians the spread is about 1.30 to 1.42, which reads as the word
+    // having some dimension. The periods, 25s and 37s, are long enough that the
+    // nine-second hold sees well under half a cycle - a drift, not a wobble.
     float rest = 1. - reveal;
-    float azimuth = t * .13 * rest;
-    float elevation = sin(t * .07) * .5 * rest;
+    float azimuth = t * .13 * rest + sin(t * .25) * .045 * reveal;
+    float elevation = sin(t * .07) * .5 * rest + sin(t * .17) * .03 * reveal;
     float sa = sin(azimuth), ca = cos(azimuth), se = sin(elevation), ce = cos(elevation);
 
     // The camera basis in closed form. The orbit direction is unit length
@@ -60,13 +75,21 @@ void main() {
     // read. It doubles as the reference depth of the distance fade below, so
     // brightness does not track the camera distance.
     //
-    // As the word forms the camera pulls back out of the swarm, from .5 to 1.3:
+    // As the word forms the camera pulls back out of the swarm, from .5 to 1.42:
     // at that distance and the .8 word scale in particles.comp.glsl, the word
     // fills the frame horizontally (its 4-letter aspect ratio is much wider
     // than the screen's, so it is always width-bound, with room left above and
     // below). The camera has to leave the cluster to read the word at all, so
     // the reveal is a retreat from the plankton rather than a push in.
-    vec3 offset = particle.xyz - direction * (.5 + .8 * reveal);
+    //
+    // 1.42 rather than the 1.3 that just fits a static camera. The widest point
+    // of the word - the N's left vertical, at -1.30 in world units once its
+    // jitter is counted - projects to -.956 of the frame half-width at 1.3 with
+    // the camera dead ahead, which is a 4% margin and no room for the drift
+    // above: at its extreme the same edge lands at -1.017 and the letter is cut
+    // off the side. The extra distance buys the margin back and costs about a
+    // tenth of the word's size.
+    vec3 offset = particle.xyz - direction * (.5 + .92 * reveal);
     vec3 view = vec3(dot(offset, vec3(ca, 0., -sa)),
                      dot(offset, vec3(-sa * se, ce, -ca * se)),
                      -dot(offset, direction));
