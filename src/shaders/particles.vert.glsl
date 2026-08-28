@@ -39,6 +39,28 @@ float MasterFade(float time) {
                1. - smoothstep(FADE_OUT_START, FADE_OUT_START + FADE_OUT_DURATION, time));
 }
 
+// Six plankton hues, indexed by the type in particle.w, which particles.comp.glsl
+// writes once at init as floor(hash(..) * TYPES) - the entry count here must
+// match TYPES there. A cosine palette cannot reach both the cool water tones and
+// the warm ones without sweeping through hues that do not belong in the water,
+// so the six are written out.
+const vec3 PLANKTON[6] = vec3[6](
+    vec3(.10, .45, .50),  // teal - copepod water
+    vec3(.14, .62, .68),  // bioluminescent cyan
+    vec3(.16, .52, .30),  // sea green - green algae
+    vec3(.10, .26, .62),  // deep blue - cyanobacteria
+    vec3(.88, .24, .18),  // light red - red-tide dinoflagellate
+    vec3(.82, .68, .20)   // faint yellow - diatom gold
+);
+
+// The camera's free-swim orbit radius. A particle on the containment shell
+// (radius .9 in particles.comp.glsl) projects to .9 * focal / ORBIT in NDC
+// height, so 1.5 puts the sphere just past the top and bottom edges and the
+// cluster fills the frame; the screen is wider than tall, so the sides keep a
+// small margin. Also the reference depth for the distance fade below, which
+// keeps overall brightness where it was before the camera moved in.
+#define ORBIT 1.5
+
 void main() {
     vec4 particle = particles[gl_VertexID].position;
 
@@ -50,7 +72,7 @@ void main() {
     // fills the frame horizontally (its 4-letter aspect ratio is much wider
     // than the screen's, so it is always width-bound, with room left above
     // and below).
-    vec3 eye = vec3(sin(azimuth) * cos(elevation), sin(elevation), cos(azimuth) * cos(elevation)) * mix(2.0, 1.3, reveal);
+    vec3 eye = vec3(sin(azimuth) * cos(elevation), sin(elevation), cos(azimuth) * cos(elevation)) * mix(ORBIT, 1.3, reveal);
     vec3 forward = normalize(-eye);
     vec3 right = normalize(cross(forward, vec3(0., 1., 0.)));
     vec3 up = cross(right, forward);
@@ -65,11 +87,7 @@ void main() {
     // screen with one sprite.
     gl_PointSize = clamp(.022 * focal * r.y / view.z, 1., 18.);
 
-    // Cosine palette (Quilez form: a + b*cos(2pi(c*x+d))) tuned to stay in the
-    // teal/cyan/blue/green range: the red channel's amplitude is kept small so no
-    // phase swings into warm hues. The 6. matches TYPES in particles.comp.glsl.
-    float hue = particle.w / 6.;
-    tint = vec3(.15, .45, .55) + vec3(.10, .35, .35) * cos(6.2831 * (vec3(.3, .5, .5) * hue + vec3(.1, .2, .35)));
+    tint = PLANKTON[int(particle.w)];
 
     // Light absorption with distance: far particles pull toward deep-water blue,
     // the way colour drops out of real water with depth.
@@ -78,5 +96,5 @@ void main() {
     tint = mix(tint, vec3(1.), reveal * .4);
     tint *= MasterFade(t);
 
-    fade = exp(-.55 * (view.z - 2.));
+    fade = exp(-.55 * (view.z - ORBIT));
 }

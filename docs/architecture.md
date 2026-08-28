@@ -202,6 +202,14 @@ Three decisions are worth recording:
   box would instead put a minimum-image test inside the O(n^2) loop, costing
   both bytes and time in the hottest code, and it pops at the box faces.
 
+The camera watches the cluster from `ORBIT` in `particles.vert.glsl`, set so the
+cluster fills the frame rather than floating in empty water: a particle on the
+containment shell projects to `radius * focal / ORBIT` in NDC height, which at
+`ORBIT` 1.5 and focal 1.7 puts the outermost particles just past the top and
+bottom edges. The 16:9 frame is wider than it is tall, so the sides keep a small
+margin. `ORBIT` is also the reference depth of the per-particle distance fade,
+so moving the camera in or out does not change overall brightness.
+
 ### NUTS formation
 
 The free-swimming cluster is the main effect. Once, at 30 seconds in (`REVEAL_START`),
@@ -210,7 +218,7 @@ and stays formed for the rest of the run - a finale rather than a recurring
 event. The same `RevealBlend` timeline constants are duplicated in
 `particles.comp.glsl` (which moves the particles) and `particles.vert.glsl`
 (which eases the camera to a front-on view over the same seconds and dollies
-in from the free-swim orbit radius to 1.3), with a comment on each marking
+in from the free-swim orbit radius `ORBIT` to 1.3), with a comment on each marking
 them as needing to match. The word is scaled and the dolly-in distance tuned
 together so the finished word fills about 85% of the frame's width with a
 comfortable margin at both 1920x1080 and 1280x720; height is necessarily far
@@ -265,11 +273,17 @@ the back buffer from a previous frame; blending is re-enabled for the points
 drawn on top. This also removes the need for `glClear` - the background
 already overwrites every pixel.
 
-The particle palette is a cosine gradient (`a + b*cos(2*pi*(c*x+d))`) chosen to
-stay in the teal/cyan/blue/violet range, with the red channel's amplitude kept
-small so no phase of the 6 types swings into a warm hue. Particles further
-from the camera are also pulled toward a dark blue-black, mimicking how real
-water absorbs colour with depth.
+The particle palette is a literal six-entry table in `particles.vert.glsl`,
+`PLANKTON`, indexed directly by the particle's type - one colour per type, so
+the cells read as distinct organisms rather than shades of one hue. The six are
+drawn from real ocean life: copepod teal, bioluminescent cyan, algal sea green,
+cyanobacterial deep blue, red-tide dinoflagellate red, and diatom gold. The
+entry count is coupled to `TYPES` in `particles.comp.glsl`. A cosine gradient
+would be fewer bytes, but it cannot reach both the cool water tones and the warm
+ones without also sweeping through hues that do not belong underwater. Particles
+further from the camera are pulled toward a dark blue-black, mimicking how real
+water absorbs colour with depth; this is what keeps the two warm entries from
+reading as foreign at the back of the cluster.
 
 ### Debug-only tooling
 
