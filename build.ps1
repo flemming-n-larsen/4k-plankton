@@ -2,6 +2,10 @@
 param(
     [ValidateSet('Debug', 'Compo')][string]$Configuration = 'Debug',
     [switch]$VerifyTools,
+    # Runs the Compo shader-minification pass for a Debug build too, so a change
+    # to the minifier flags can be compared frame-by-frame with the capture
+    # options in src/intro.c rather than only by eye on the Compo build.
+    [switch]$MinifyShaders,
     [switch]$Run
 )
 
@@ -85,16 +89,15 @@ $shaders = @(
     @{ file = 'particles.comp.glsl'; symbol = 'particles_compute_shader' }
     @{ file = 'particles.vert.glsl'; symbol = 'particles_vertex_shader' }
     @{ file = 'particles.frag.glsl'; symbol = 'particles_fragment_shader' }
-    @{ file = 'background.vert.glsl'; symbol = 'background_vertex_shader' }
     @{ file = 'background.frag.glsl'; symbol = 'background_fragment_shader' }
 )
-function Invoke-ShaderGeneration([string]$Configuration, [string]$OutputDirectory, $Toolchain) {
+function Invoke-ShaderGeneration([bool]$Minify, [string]$OutputDirectory, $Toolchain) {
     $shaderDirectory = Join-Path $OutputDirectory 'generated'
     New-Item -ItemType Directory -Force -Path $shaderDirectory | Out-Null
     $declarations = foreach ($shader in $shaders) {
         $source = Join-Path $repoRoot (Join-Path 'src\shaders' $shader.file)
         $shaderInput = $source
-        if ($Configuration -eq 'Compo') {
+        if ($Minify) {
             $shaderInput = Join-Path $shaderDirectory $shader.file
             Invoke-Native $Toolchain.shaderMinifier @('--format', 'text', '--preserve-externals', '-o', $shaderInput, $source)
         }
@@ -110,11 +113,11 @@ $($declarations -join [Environment]::NewLine)
     return $shaderDirectory
 }
 
-$requireCrinkler = $VerifyTools -or $Configuration -eq 'Compo'; $toolchain = Get-Toolchain $requireCrinkler
+$requireCrinkler = $VerifyTools -or $MinifyShaders -or $Configuration -eq 'Compo'; $toolchain = Get-Toolchain $requireCrinkler
 if ($VerifyTools) { $toolchain | ConvertTo-Json; if (!$PSBoundParameters.ContainsKey('Configuration')) { exit 0 } }
 $outputDirectory = Join-Path $repoRoot (Join-Path 'out' $Configuration); $objectDirectory = Join-Path $outputDirectory 'obj'
 New-Item -ItemType Directory -Force -Path $objectDirectory | Out-Null
-$generatedDirectory = Invoke-ShaderGeneration $Configuration $outputDirectory $toolchain
+$generatedDirectory = Invoke-ShaderGeneration ($MinifyShaders -or $Configuration -eq 'Compo') $outputDirectory $toolchain
 $sourceFiles = @('intro.c', 'audio.c'); $executable = Join-Path $outputDirectory 'in4k-particles.exe'
 $objects = foreach ($sourceFile in $sourceFiles) {
     $source = Join-Path $repoRoot (Join-Path 'src' $sourceFile)
@@ -129,7 +132,7 @@ if ($Configuration -eq 'Debug') {
     Invoke-Native 'link.exe' (@('/nologo', '/subsystem:windows', '/entry:WinMainCRTStartup', '/nodefaultlib', "/out:$executable") + $objects + $libraries)
 } else {
     $report = Join-Path $outputDirectory 'crinkler-report.html'
-    Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', "/OUT:$executable", "/REPORT:$report") + $objects + $libraries)
+    Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', '/TINYHEADER', '/TINYIMPORT', '/ORDERTRIES:10000', "/OUT:$executable", "/REPORT:$report") + $objects + $libraries)
     $bytes = (Get-Item -LiteralPath $executable).Length
     [ordered]@{ executable = 'in4k-particles.exe'; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
     Write-Host "Compo size: $bytes / 4096 bytes"; if ($bytes -gt 4096) { Fail "Compo executable exceeds the 4096-byte limit by $($bytes - 4096) bytes." }

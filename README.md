@@ -48,7 +48,7 @@ Build and run the Crinkler-compressed Compo version:
 
 The Compo build opens a borderless primary-monitor window and fails if the executable exceeds 4,096 bytes. Use `-Run` to launch it immediately. Build outputs, including the executable, Crinkler report, size report, and toolchain report, are written under `out\` and ignored by Git.
 
-Press Escape to exit either build.
+Press Escape to exit either build. The intro uses the predefined `"static"` window class and runs no message pump in the Compo build, so the window's close button does nothing - Escape, or letting the run finish, is how it ends.
 
 ## Inspecting a Debug run
 
@@ -59,6 +59,12 @@ The Debug build writes shader and OpenGL diagnostics to `in4k.log` as well as to
 .\out\Debug\in4k-particles.exe -live20                        # real timing, capture after 20 seconds
 .\out\Debug\in4k-particles.exe -shot900 -width1280 -height720 # exact client size
 .\out\Debug\in4k-particles.exe -shot900 -steps20              # 5 simulated minutes in ~15s
+```
+
+Add `-MinifyShaders` to the Debug build to compile the same minified shader text the Compo build uses, so a shader change can be compared frame-by-frame rather than only by eye on the Compo build:
+
+```powershell
+.\build.ps1 -Configuration Debug -MinifyShaders
 ```
 
 `-shot` is reproducible, which makes it the right option for comparing a change; `-live` exercises the real wall-clock timing path that `-shot` bypasses. `-width`/`-height` check the two resolutions TRSAC requires without changing display mode. `-steps<k>` runs k simulation steps per rendered frame, which reaches a late state quickly when tuning and produces byte-identical output to running k times as many frames. These options are compiled out of the Compo build.
@@ -81,7 +87,7 @@ ffmpeg -framerate 30 -i frames\frame%05d.bmp -stream_loop -1 -i ocean.wav -short
 
 `-shortest` trims the looped ambience to the video's length. `frames\` and the output video are generated output, not source, and are not tracked in version control; delete `frames\` once the video is encoded.
 
-To try a different attractor, change `SEED` in `src/shaders/particles.comp.glsl`. Nothing is seeded from the clock, so a given seed always produces the same run.
+To try a different attractor, change the seed constant in `hash()` in `src/shaders/particles.comp.glsl`. Nothing is seeded from the clock, so a given seed always produces the same run.
 
 ## Introduction to the in4k scene
 

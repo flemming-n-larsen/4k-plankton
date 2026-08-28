@@ -51,7 +51,12 @@ The intended public interface is a repository-owned PowerShell script:
 .\build.ps1 -VerifyTools
 .\build.ps1 -Configuration Debug
 .\build.ps1 -Configuration Compo
+.\build.ps1 -Configuration Debug -MinifyShaders
 ```
+
+`-MinifyShaders` runs the Compo shader-minification pass for a Debug build, so a
+change to the minifier or to the shaders can be compared frame-by-frame with the
+capture options in `src/intro.c` rather than only by eye on the Compo build.
 
 The script is responsible for:
 
@@ -62,6 +67,18 @@ The script is responsible for:
 5. writing the executable, Crinkler report, toolchain report, and Compo size report to predictable ignored output directories.
 
 Compiler and linker commands should remain visible in build output so size regressions and configuration differences are easy to diagnose. The build must not rely on a developer command prompt already being configured.
+
+## Pinned size-critical options
+
+| Stage | Options | Why |
+| --- | --- | --- |
+| `cl.exe`, Compo | `/O1 /Os /Zl /GS- /TC /DWIN32 /DCOMPO` | Optimize for size, no CRT, no stack cookies. `/arch:IA32` is *not* usable: x87 float-to-int conversion emits a call to a CRT helper that `/NODEFAULTLIB` cannot resolve. `/Gr` and `/Gv` build but come out slightly larger. |
+| Shader Minifier | `--format text --preserve-externals` | Uniform and interface-block names are looked up by name from C, so they must survive. `--preprocess` is a no-op here - it does not substitute object-like macros - and `--aggressive-inlining` makes no difference to the final size. |
+| Crinkler | `/COMPMODE:VERYSLOW /TINYHEADER /TINYIMPORT /ORDERTRIES:10000` | `/TINYHEADER` and `/TINYIMPORT` together are worth about 100 bytes. `/UNSAFEIMPORT` adds nothing on top of `/TINYIMPORT`. `/ORDERTRIES` plateaus at 10000 - higher values cost build time without shrinking further - and `/HASHTRIES` does not help. |
+
+`/TINYHEADER` and `/TINYIMPORT` trade loader robustness for size, so any change
+to them must be validated by running the Compo executable, not only by building
+it. `/ORDERTRIES:10000` makes a Compo link take roughly 20 seconds.
 
 ## Why not CMake initially?
 

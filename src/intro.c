@@ -6,12 +6,12 @@
 #define PARTICLE_COUNT 16384
 #define WORKGROUP_SIZE 256
 
-// When the run should end, in seconds: REVEAL_START (30) + REVEAL_EASE (6) +
-// the 9-second hold on the formed logo + FADE_OUT_DURATION (8) from
-// particles.vert.glsl's MasterFade, i.e. the moment the screen reaches full
-// black, plus a further 3-second hold so the ending reads as deliberate rather
-// than the window just sitting there. Must be kept in step with those shader
-// constants by hand, same as the other timeline values duplicated across files.
+// When the run should end, in seconds: the word forms over seconds 30 to 36,
+// holds for 9, and the master fade in particles.vert.glsl and
+// background.frag.glsl takes the screen to full black over seconds 45 to 53;
+// a further 3-second hold makes the ending read as deliberate rather than the
+// window just sitting there. Must be kept in step with those shader constants
+// by hand, same as the other timeline values duplicated across files.
 #define END_SECONDS 56.f
 
 // The simulation runs at a fixed 1/60 s step so the run is reproducible on any
@@ -195,12 +195,6 @@ static void FormatFrameName(char* buffer, int frame) {
 }
 #endif
 
-static LRESULT CALLBACK WindowProcedure(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
-    if (message == WM_CLOSE) { DestroyWindow(window); return 0; }
-    if (message == WM_DESTROY) { PostQuitMessage(0); return 0; }
-    return DefWindowProcA(window, message, w_param, l_param);
-}
-
 static int LoadOpenGl(void) {
     const char* name = gl_names;
     int index;
@@ -238,11 +232,14 @@ static void LinkProgram(GLuint program) {
 }
 
 static int Run(void) {
-    WNDCLASSA window_class = {0}; PIXELFORMATDESCRIPTOR pixel_format = {0}; MSG message;
+    PIXELFORMATDESCRIPTOR pixel_format = {0};
     HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
     GLuint simulation, rendering, background, buffer;
-    GLint delta_location, simulation_time_location, time_location, resolution_location, background_time_location, background_resolution_location;
-    RECT client; int width; int height; DWORD start_ticks; float now; float sim_time; int sim_steps; int step;
+    GLint delta_location, simulation_time_location, time_location, background_time_location;
+    int width; int height; DWORD start_ticks; float now; float sim_time; int sim_steps; int step;
+#ifdef DEBUG
+    RECT client; MSG message;
+#endif
 #ifdef DEBUG
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
     int forced_width = Option("-width", 0), forced_height = Option("-height", 0);
@@ -253,20 +250,24 @@ static int Run(void) {
     int record_fps = Option("-record", 30);
     if (record_fps) CreateDirectoryA("frames", 0);
 #endif
-    window_class.style = CS_OWNDC; window_class.lpfnWndProc = WindowProcedure;
-    window_class.hInstance = GetModuleHandleA(0); window_class.lpszClassName = "in4k.particles";
-    if (!RegisterClassA(&window_class)) return 1;
+    // The predefined "static" class rather than one of our own: it already has
+    // a window procedure, which saves registering a class and writing one. The
+    // intro never handles a message - it ends on Escape or on its own clock -
+    // so nothing is lost but the close button.
 #ifdef DEBUG
     // "-width<w> -height<h>" gives a client area of exactly that size, so the
     // required compo resolutions can be checked without changing display mode.
     if (forced_width && forced_height)
-        window = CreateWindowExA(0, window_class.lpszClassName, "", WS_POPUP | WS_VISIBLE, 0, 0, forced_width, forced_height, 0, 0, window_class.hInstance, 0);
+        window = CreateWindowExA(0, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0, forced_width, forced_height, 0, 0, 0, 0);
     else
 #endif
 #ifdef COMPO
-    window = CreateWindowExA(0, window_class.lpszClassName, "", WS_POPUP | WS_VISIBLE, 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), 0, 0, window_class.hInstance, 0);
+    // The client area of a WS_POPUP window is the whole window, so the screen
+    // metrics are also the framebuffer size - no GetClientRect needed.
+    window = CreateWindowExA(0, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
+                             width = GetSystemMetrics(SM_CXSCREEN), height = GetSystemMetrics(SM_CYSCREEN), 0, 0, 0, 0);
 #else
-    window = CreateWindowExA(0, window_class.lpszClassName, "in4k particles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, (GetSystemMetrics(SM_CXSCREEN) - 1280) / 2, (GetSystemMetrics(SM_CYSCREEN) - 720) / 2, 1280, 720, 0, 0, window_class.hInstance, 0);
+    window = CreateWindowExA(0, "static", "in4k particles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, (GetSystemMetrics(SM_CXSCREEN) - 1280) / 2, (GetSystemMetrics(SM_CYSCREEN) - 720) / 2, 1280, 720, 0, 0, 0, 0);
 #endif
     if (!window) return 2;
     device_context = GetDC(window); pixel_format.nSize = sizeof(pixel_format); pixel_format.nVersion = 1;
@@ -287,16 +288,27 @@ static int Run(void) {
     AttachShader(rendering, GL_VERTEX_SHADER, particles_vertex_shader);
     AttachShader(rendering, GL_FRAGMENT_SHADER, particles_fragment_shader);
     LinkProgram(rendering);
+    // No vertex stage: in a compatibility profile a program with only a
+    // fragment shader runs the fixed-function vertex pipeline, which is exactly
+    // what a "gl_Position = gl_Vertex" pass-through would have done.
     background = glCreateProgram_();
-    AttachShader(background, GL_VERTEX_SHADER, background_vertex_shader);
     AttachShader(background, GL_FRAGMENT_SHADER, background_fragment_shader);
     LinkProgram(background);
     delta_location = glGetUniformLocation_(simulation, "d");
     simulation_time_location = glGetUniformLocation_(simulation, "t");
     time_location = glGetUniformLocation_(rendering, "t");
-    resolution_location = glGetUniformLocation_(rendering, "r");
     background_time_location = glGetUniformLocation_(background, "t");
-    background_resolution_location = glGetUniformLocation_(background, "r");
+
+#ifndef COMPO
+    GetClientRect(window, &client); width = client.right - client.left; height = client.bottom - client.top;
+#endif
+    // The viewport already covers the whole window when the context is first
+    // made current, and neither the window nor the resolution ever changes, so
+    // the resolution uniforms are set once here rather than every frame.
+    glUseProgram_(rendering);
+    glUniform2f_(glGetUniformLocation_(rendering, "r"), (float)width, (float)height);
+    glUseProgram_(background);
+    glUniform2f_(glGetUniformLocation_(background, "r"), (float)width, (float)height);
 
     glGenBuffers_(1, &buffer);
     glBindBuffer_(GL_SHADER_STORAGE_BUFFER, buffer);
@@ -318,7 +330,9 @@ static int Run(void) {
     // single frame.
     start_ticks = GetTickCount(); sim_steps = 0; sim_time = 0.f;
     for (;;) {
-        while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) { if (message.message == WM_QUIT) goto done; TranslateMessage(&message); DispatchMessageA(&message); }
+#ifdef DEBUG
+        while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) DispatchMessageA(&message);
+#endif
         if (GetAsyncKeyState(VK_ESCAPE)) break;
         now = (float)(GetTickCount() - start_ticks) * .001f;
 #ifndef DEBUG
@@ -355,26 +369,18 @@ static int Run(void) {
             glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
         }
 
-        GetClientRect(window, &client); width = client.right - client.left; height = client.bottom - client.top;
-        glViewport(0, 0, width, height);
-
-        // The background triangle covers every pixel of the viewport, so no
-        // glClear is needed; blending is off here (opaque replace) and back on
-        // for the additive point sprites drawn over it.
+        // glRecti covers every pixel of the viewport in one call, so no glClear
+        // is needed and no vertex data has to be handed over; blending is off
+        // here (opaque replace) and back on for the additive point sprites
+        // drawn over it.
         glDisable(GL_BLEND);
         glUseProgram_(background);
         glUniform1f_(background_time_location, sim_time);
-        glUniform2f_(background_resolution_location, (float)width, (float)height);
-        glBegin(GL_TRIANGLES);
-        glVertex2f(-1, -1);
-        glVertex2f(3, -1);
-        glVertex2f(-1, 3);
-        glEnd();
+        glRecti(-1, -1, 1, 1);
         glEnable(GL_BLEND);
 
         glUseProgram_(rendering);
         glUniform1f_(time_location, sim_time);
-        glUniform2f_(resolution_location, (float)width, (float)height);
         glDrawArrays(GL_POINTS, 0, PARTICLE_COUNT);
 #ifdef DEBUG
         // Before the swap: the back buffer is undefined afterwards.
@@ -389,9 +395,9 @@ static int Run(void) {
 #endif
         SwapBuffers(device_context);
     }
-done:
-    AudioStop();
-    wglMakeCurrent(0, 0); wglDeleteContext(render_context); ReleaseDC(window, device_context); return 0;
+    // No teardown: ExitProcess drops the render context, the device context and
+    // the sound along with the process.
+    return 0;
 }
 
 void __cdecl WinMainCRTStartup(void) { ExitProcess((UINT)Run()); }

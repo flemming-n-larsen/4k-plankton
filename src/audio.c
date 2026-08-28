@@ -32,14 +32,23 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // of staying at one fixed mix.
 #define TEXTURE_SAMPLES (SAMPLE_RATE * 6)
 
-#pragma pack(push, 1)
-typedef struct {
-    char riff_id[4]; unsigned riff_size; char wave_id[4];
-    char fmt_id[4]; unsigned fmt_size; unsigned short format; unsigned short channels;
-    unsigned sample_rate; unsigned byte_rate; unsigned short block_align; unsigned short bits_per_sample;
-    char data_id[4]; unsigned data_size;
-} WavHeader;
-#pragma pack(pop)
+// The 44-byte RIFF header as literal little-endian words rather than a packed
+// struct filled in field by field: mono 16-bit PCM at SAMPLE_RATE, with every
+// size a compile-time constant. Copying eleven words is far less code than
+// fifteen assignments and a four-character tag helper.
+static const unsigned wav_header[11] = {
+    0x46464952,                 // "RIFF"
+    36 + LOOP_SAMPLES * 2,      // bytes after this field
+    0x45564157,                 // "WAVE"
+    0x20746d66,                 // "fmt "
+    16,                         // format chunk size
+    0x00010001,                 // PCM, one channel
+    SAMPLE_RATE,
+    SAMPLE_RATE * 2,            // byte rate
+    0x00100002,                 // block align 2, 16 bits per sample
+    0x61746164,                 // "data"
+    LOOP_SAMPLES * 2
+};
 
 static unsigned int rng_state;
 
@@ -56,48 +65,56 @@ static float NextNoise(void) {
     return (float)(int)NextRandom() * (1.f / 2147483648.f);
 }
 
-static void PutTag(char* destination, const char* text) {
-    int i;
-    for (i = 0; i < 4; i++) destination[i] = text[i];
-}
+// Waypoint state for the two envelopes, indexed by the slot argument: the
+// swell in slot 0 and the foam texture in slot 1. Held here rather than passed
+// in as three pointers per call, which cost more than the two arrays do. The
+// counters start at their own period so the first call seeds a target.
+static float waypoint_from[2], waypoint_to[2];
+static int waypoint_counter[2] = { SWELL_SAMPLES, TEXTURE_SAMPLES };
 
-// Eases linearly between two waypoints spaced `period` samples apart,
-// smoothstepped. `counter`, `from`, and `to` are the caller's persistent state.
-static float Waypoint(int* counter, float* from, float* to, int period) {
+// Eases between two waypoints spaced period samples apart, smoothstepped.
+static float Waypoint(int slot, int period) {
     float fraction, eased;
-    if (*counter >= period) { *counter = 0; *from = *to; *to = NextNoise() * .5f + .5f; }
-    fraction = (float)*counter / (float)period;
+    if (waypoint_counter[slot] >= period) {
+        waypoint_counter[slot] = 0;
+        waypoint_from[slot] = waypoint_to[slot];
+        waypoint_to[slot] = NextNoise() * .5f + .5f;
+    }
+    fraction = (float)waypoint_counter[slot]++ / (float)period;
     eased = fraction * fraction * (3.f - 2.f * fraction);
-    (*counter)++;
-    return *from + (*to - *from) * eased;
+    return waypoint_from[slot] + (waypoint_to[slot] - waypoint_from[slot]) * eased;
 }
 
-// Synthesizes a seamless, loopable ocean ambience. The amplitude envelope
-// eases between random waypoints a couple of seconds apart, so swells rise
-// and fall with real amplitude rather than staying near-constant - a single
-// leaky-integrator filter was tried first, but a coefficient slow enough to
-// change over seconds also crushed its variance to almost nothing, since for
-// that filter bandwidth and amplitude shrink together. The envelope shapes a
-// two-stage low-passed "surf" body (one stage alone still let through enough
-// high end to sound bright and harsh - this project's first pass at the whole
-// ambience had the same complaint, from a "foam" layer that was raw
-// differenced noise, i.e. almost pure treble). Foam is now the differenced
-// noise smoothed by its own low-pass and mixed in at an amount that itself
-// drifts slowly between quieter and hissier waypoints, so the ambience's
-// brightness varies over time rather than sitting at one fixed mix. An
-// earlier version added a sparse, randomly-timed resonant "creak" on top;
-// it read as an out-of-place electronic artifact rather than part of the
-// ocean and was removed, keeping the ambience to just surf and foam. The
-// last CROSSFADE_SAMPLES of a longer run are blended into the loop start so
-// the wrap has no audible click.
+// Synthesizes a seamless, loopable ocean ambience directly into the PCM block
+// the player is handed - no float scratch buffer, since the only thing that
+// needed one was the crossfade, which works just as well on the samples.
+//
+// The amplitude envelope eases between random waypoints a couple of seconds
+// apart, so swells rise and fall with real amplitude rather than staying
+// near-constant - a single leaky-integrator filter was tried first, but a
+// coefficient slow enough to change over seconds also crushed its variance to
+// almost nothing, since for that filter bandwidth and amplitude shrink
+// together. The envelope shapes a two-stage low-passed surf body.
+//
+// Foam is differenced noise - a 6 dB/octave rise - smoothed by two low-pass
+// stages rather than one. One stage only takes that same 6 dB/octave back, so
+// nothing above the corner ever rolls off and the layer reads as bright hiss
+// sitting on top of the water. Two stages fall 12 dB/octave, leaving a band a
+// few hundred Hz wide that reads as foam rather than treble. The stages cost
+// most of the level, so the mix amount below is scaled back up to keep the
+// foam-to-surf balance; that amount itself drifts slowly between quieter and
+// hissier waypoints, so the brightness of the ambience varies over time.
+//
+// The last CROSSFADE_SAMPLES of a longer run are blended into the loop start
+// so the wrap has no audible click.
 static void* GenerateOcean(void) {
-    void* block = VirtualAlloc(0, sizeof(WavHeader) + LOOP_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
-    float* raw = (float*)VirtualAlloc(0, TOTAL_SAMPLES * sizeof(float), MEM_COMMIT, PAGE_READWRITE);
-    WavHeader* header; short* pcm; int i;
-    int swell_counter = SWELL_SAMPLES, texture_counter = TEXTURE_SAMPLES;
-    float surf1 = 0.f, surf2 = 0.f, foam_smooth = 0.f, previous_white = 0.f;
-    float swell_from = 0.f, swell_to = 0.f, texture_from = 0.f, texture_to = 0.f;
-    if (!block || !raw) return 0;
+    short* pcm;
+    void* block = VirtualAlloc(0, 44 + TOTAL_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
+    int i;
+    float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, previous_white = 0.f;
+    if (!block) return 0;
+    for (i = 0; i < 11; i++) ((unsigned*)block)[i] = wav_header[i];
+    pcm = (short*)((char*)block + 44);
 
     rng_state = AUDIO_SEED;
     for (i = 0; i < TOTAL_SAMPLES; i++) {
@@ -106,36 +123,27 @@ static void* GenerateOcean(void) {
         float shaped, texture, foam_raw, sample;
         surf1 += (white - surf1) * .035f;
         surf2 += (surf1 - surf2) * .035f;
-        shaped = Waypoint(&swell_counter, &swell_from, &swell_to, SWELL_SAMPLES);
-        texture = Waypoint(&texture_counter, &texture_from, &texture_to, TEXTURE_SAMPLES);
+        shaped = Waypoint(0, SWELL_SAMPLES);
+        texture = Waypoint(1, TEXTURE_SAMPLES);
 
         foam_raw = white2 - previous_white;
         previous_white = white2;
-        foam_smooth += (foam_raw - foam_smooth) * .3f;
+        foam1 += (foam_raw - foam1) * .16f;
+        foam2 += (foam1 - foam2) * .16f;
 
         sample = surf2 * (.25f + .7f * shaped)
-               + foam_smooth * shaped * shaped * (.08f + .32f * texture);
+               + foam2 * shaped * shaped * (.72f + 2.88f * texture);
         // Soft-knee saturation instead of a hard clamp: maps all of R into
         // (-1,1) smoothly, so loud swells round off instead of clipping.
-        raw[i] = sample / (1.f + (sample < 0.f ? -sample : sample));
+        pcm[i] = (short)(int)(sample / (1.f + (sample < 0.f ? -sample : sample)) * 30000.f);
     }
+    // The loop plays samples 0..LOOP_SAMPLES-1, so sample 0 has to continue
+    // from sample LOOP_SAMPLES-1: the blend therefore starts at the run's
+    // continuation past the loop and eases back to the run's own opening.
     for (i = 0; i < CROSSFADE_SAMPLES; i++) {
         float mix = (float)i / (float)CROSSFADE_SAMPLES;
-        raw[i] = raw[i] * (1.f - mix) + raw[LOOP_SAMPLES + i] * mix;
+        pcm[i] = (short)(int)(pcm[LOOP_SAMPLES + i] * (1.f - mix) + pcm[i] * mix);
     }
-
-    header = (WavHeader*)block;
-    PutTag(header->riff_id, "RIFF"); PutTag(header->wave_id, "WAVE"); PutTag(header->fmt_id, "fmt ");
-    header->riff_size = 36 + LOOP_SAMPLES * 2;
-    header->fmt_size = 16; header->format = 1; header->channels = 1;
-    header->sample_rate = SAMPLE_RATE; header->byte_rate = SAMPLE_RATE * 2;
-    header->block_align = 2; header->bits_per_sample = 16;
-    PutTag(header->data_id, "data"); header->data_size = LOOP_SAMPLES * 2;
-
-    pcm = (short*)((char*)block + sizeof(WavHeader));
-    for (i = 0; i < LOOP_SAMPLES; i++) pcm[i] = (short)(int)(raw[i] * 30000.f);
-
-    VirtualFree(raw, 0, MEM_RELEASE);
     return block;
 }
 
@@ -146,14 +154,10 @@ void AudioStart(void) {
     // Written so the generated sound can be reviewed outside the running
     // intro; not part of the Compo path.
     {
-        DWORD written; unsigned size = sizeof(WavHeader) + LOOP_SAMPLES * 2;
+        DWORD written; unsigned size = 44 + LOOP_SAMPLES * 2;
         HANDLE file = CreateFileA("ocean.wav", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         if (file != INVALID_HANDLE_VALUE) { WriteFile(file, wav, size, &written, 0); CloseHandle(file); }
     }
 #endif
     PlaySoundA(wav, 0, SND_ASYNC | SND_LOOP | SND_MEMORY | SND_NODEFAULT);
-}
-
-void AudioStop(void) {
-    PlaySoundA(0, 0, 0);
 }
