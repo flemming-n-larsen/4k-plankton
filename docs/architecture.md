@@ -339,12 +339,23 @@ comfortable margin at both 1920x1080 and 1280x720; height is necessarily far
 less full, since the word's 4-letter aspect ratio is much wider than the
 16:9 frame.
 
-The whole scene also fades: in from black over the first 8 seconds
-- slow enough that the procedural underwater background
-(depth gradient, caustics, god rays) reads clearly before the particles
-brighten to full strength - and back to black over seconds 45 to 53, which is
+The whole scene also fades: in from black over the first 5 seconds, and back to
+black over seconds 45 to 53, which is
 9 seconds after the reveal ease ends, ending the intro on the held word
-rather than an abrupt cut. The 9 is measured, not guessed: the ease ending is
+rather than an abrupt cut.
+
+The fade-in is short because the ascent means the intro opens on its darkest
+frame, and the target venue is a projector in a blacked-out hall. Modelling one
+- an elevated black floor from a finite contrast ratio, and a cinema gamma
+nearer 2.5 than the 2.2 the frame is authored for - costs roughly a fifth of the
+midtones: a frame whose median code value is 50 on a monitor lands near 40 on
+the projector. The deep-water look survives that comfortably, because what
+carries it is bright points against black rather than shadow detail. What did
+not survive was the opening: over an 8-second fade the frame at 2 seconds was
+90% below code value 16, which is an empty screen for the first seconds of a
+compo entry. At 5 seconds the same frame reads clearly as a swarm in deep water.
+The floor of the ascent was deliberately not raised to compensate - that would
+spend the contrast the arc is built on. The 9 is measured, not guessed: the ease ending is
 not the moment the logo stops moving, because the particles are still damping
 into their targets for another ~3.7 seconds after it. Frame-to-frame motion
 does not fall below noise until about 39.7 seconds, so the fade starts at 45 to

@@ -100,12 +100,10 @@ void main() {
     // exactly on the timeline, with no constant to keep in step. While the
     // cluster is just drifting it reads as a faint twinkle on the fastest cells.
     c *= 1. + 1.5 * length(v[gl_VertexID * 2 + 1].xyz);
-    // Fades in from black slowly, so the procedural background (depth gradient,
-    // caustics, god rays) reads clearly before the particles compete for
-    // attention, then fades back to black a few seconds after NUTS is fully
+    // Fades in from black, then back to black a few seconds after NUTS is fully
     // formed, ending the intro on the held word rather than an abrupt cut. Must
     // match the copy in background.frag.glsl.
-    c *= min(smoothstep(0., 8., t), 1. - smoothstep(45., 53., t));
+    c *= min(smoothstep(0., 5., t), 1. - smoothstep(45., 53., t));
     // The per-particle distance fade, exp(-.55 * (view.z - .5)), folded in.
     c *= exp(.275 - .55 * view.z);
 }
