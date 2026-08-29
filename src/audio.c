@@ -30,6 +30,62 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // of staying at one fixed mix.
 #define TEXTURE_SAMPLES (SAMPLE_RATE * 6)
 
+// ---------------------------------------------------------------------------
+// Tonal layer
+//
+// Sines without the CRT: the magic-circle oscillator, a symplectic rotation
+// whose amplitude neither decays nor grows across the whole run - no lookup
+// table, no renormalisation, and no sinf, which /NODEFAULTLIB has no library
+// for. The output y starts at zero, so a voice entering mid-run enters
+// silently, and k may change at any sample without disturbing the phase,
+// which is what makes the chord changes below click-free.
+//
+//     y += k * z;   z -= k * y;      with k = 2*PI*f / SAMPLE_RATE
+//
+// That small-angle k puts the true frequency out by k*k/24 - 0.002% at the
+// pad pitches and 0.12% at the accent - inaudible, and far cheaper than
+// correcting it. The map is stable for k < 2, which every pitch here clears
+// by three orders of magnitude.
+#define TAU_PER_SAMPLE (6.2831853f / SAMPLE_RATE)
+#define VOICES 5    // three pad voices, then the sub and the accent
+
+// Key of D minor: it resolves brighter across the ascent and settles home
+// under the held word. The three pad voices sit in D3..D4, above the surf
+// body - which carries about 72% of its energy below 200 Hz - and below the
+// foam band, so the chord occupies a gap in the ambience instead of fighting
+// it. Six distinct pitches serve fifteen chord slots, so the chords are
+// stored as byte indices into this table rather than as a flat float grid.
+static const float pitch[8] = {
+    130.813f,   // 0  C3
+    146.832f,   // 1  D3
+    174.614f,   // 2  F3
+    220.000f,   // 3  A3
+    233.082f,   // 4  Bb3
+    293.665f,   // 5  D4
+    73.416f,    // 6  D2, the sub under the reveal
+    587.330f    // 7  D5, the accent struck at the reveal
+};
+// No voice moves by more than a whole step at any change. k is switched
+// instantaneously, and smooth voice leading is what keeps that step reading
+// as a chord change rather than as a jump.
+static const unsigned char chord[5][3] = {
+    { 1, 2, 3 },    // from  6s   Dm
+    { 2, 3, 5 },    // from 16s   Dm/F
+    { 1, 2, 4 },    // from 24s   Bb
+    { 0, 2, 3 },    // from 30s   F
+    { 1, 2, 3 }     // from 38s   Dm
+};
+
+static float osc_y[VOICES];
+static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f };
+
+static float Oscillator(int voice, float frequency) {
+    float k = frequency * TAU_PER_SAMPLE;
+    osc_y[voice] += k * osc_z[voice];
+    osc_z[voice] -= k * osc_y[voice];
+    return osc_y[voice];
+}
+
 // The 44-byte RIFF header as literal little-endian words rather than a packed
 // struct filled in field by field: mono 16-bit PCM at SAMPLE_RATE, with every
 // size a compile-time constant. Copying eleven words is far less code than
@@ -108,6 +164,14 @@ static float Waypoint(int slot, int period) {
 // foam-to-surf balance; that amount itself drifts slowly between quieter and
 // hissier waypoints, so the brightness of the ambience varies over time.
 //
+// Over that noise bed sits a tonal layer: three sine voices moving through
+// five slow chord changes in D minor, a sub that arrives under the reveal and
+// a single struck tone on the sample the word forms. It carries no rhythm and
+// no melody by choice - the visuals are driven by sim_time and the audio by
+// the sound card, so anything rhythmic here could drift against the picture on
+// a machine that cannot hold 60 Hz. The pad rides the same macro envelope as
+// the water, so adding it does not flatten the run's dynamics.
+//
 // Over the run the ambience follows the picture: quiet and close while the
 // water is deep, opening out as the scene rises, surging as the particles let
 // go at 30 seconds and settling again over the held word, then fading with the
@@ -119,6 +183,7 @@ static void* GenerateOcean(void) {
     void* block = VirtualAlloc(0, 44 + RUN_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, previous_white = 0.f;
+    float accent = 0.f;
     if (!block) return 0;
     for (i = 0; i < 11; i++) ((unsigned*)block)[i] = wav_header[i];
     pcm = (short*)((char*)block + 44);
@@ -127,7 +192,8 @@ static void* GenerateOcean(void) {
     for (i = 0; i < RUN_SAMPLES; i++) {
         float white = NextNoise();
         float white2 = NextNoise();
-        float shaped, texture, foam_raw, sample;
+        float shaped, texture, foam_raw, sample, tonal, wet;
+        int section, voice;
         // Seconds into the run, which is what the macro envelope is written
         // against. These four windows must stay in step with the shaders: 6..30
         // is the ascent, 30 is when the particles let go, and 45..53 is the
@@ -135,7 +201,10 @@ static void* GenerateOcean(void) {
         float second = (float)i * (1.f / SAMPLE_RATE);
         float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
         float surge = Smoothstep(28.f, 31.5f, second) * (1.f - Smoothstep(33.f, 42.f, second));
-        float macro = (arc + .6f * surge) * (1.f - Smoothstep(45.f, 53.f, second));
+        float macro = arc + .6f * surge;
+        // The master fade is pulled out of macro and applied to the finished
+        // mix instead, so it takes the tonal layer down with the ambience.
+        float fade = 1.f - Smoothstep(45.f, 53.f, second);
         surf1 += (white - surf1) * .035f;
         surf2 += (surf1 - surf2) * .035f;
         shaped = Waypoint(0, SWELL_SAMPLES);
@@ -146,13 +215,37 @@ static void* GenerateOcean(void) {
         foam1 += (foam_raw - foam1) * .16f;
         foam2 += (foam1 - foam2) * .16f;
 
+        // The chord section, on the same clock as the macro envelope above.
+        section = second < 16.f ? 0 : second < 24.f ? 1
+                : second < 30.f ? 2 : second < 38.f ? 3 : 4;
+        tonal = 0.f;
+        for (voice = 0; voice < 3; voice++)
+            tonal += Oscillator(voice, pitch[chord[section][voice]]);
+        // The pad rides the same macro envelope as the water, so the chord
+        // swells with the ascent and lifts at the reveal instead of sitting
+        // at one level and flattening the run's dynamics.
+        tonal *= .17f * macro * Smoothstep(6.f, 16.f, second);
+        // The sub is what gives the reveal weight on a hall system, rather
+        // than letting it arrive as nothing but more foam.
+        tonal += Oscillator(3, pitch[6]) * .25f
+               * Smoothstep(29.f, 32.f, second) * (1.f - Smoothstep(40.f, 50.f, second));
+        // One struck tone on the sample the word forms, decayed by a repeated
+        // multiply: an exponential with a 0.65 s time constant and no expf.
+        if (i == 30 * SAMPLE_RATE) accent = 1.f;
+        tonal += Oscillator(4, pitch[7]) * accent * .18f;
+        accent *= .99993f;
+
         // The surge opens the foam further than the level alone would, so the
         // reveal arrives as a wash of white water rather than just louder surf.
         sample = (surf2 * (.25f + .7f * shaped)
                + foam2 * shaped * shaped * (.72f + 2.88f * texture) * (1.f + 1.8f * surge)) * macro;
         // Soft-knee saturation instead of a hard clamp: maps all of R into
-        // (-1,1) smoothly, so loud swells round off instead of clipping.
-        pcm[i] = (short)(int)(sample / (1.f + (sample < 0.f ? -sample : sample)) * 30000.f);
+        // (-1,1) smoothly, so loud swells round off instead of clipping. The
+        // ambience gets its own knee before the tonal layer is added, so the
+        // sustained pad cannot dominate the knee and duck the water on every
+        // swell; the sum is then rounded off by a second one.
+        wet = sample / (1.f + (sample < 0.f ? -sample : sample)) * .78f + tonal;
+        pcm[i] = (short)(int)(wet / (1.f + (wet < 0.f ? -wet : wet)) * fade * 30000.f);
     }
     return block;
 }
