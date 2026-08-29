@@ -357,7 +357,7 @@ logo with a letter cut off the side of a projector screen.
 
 The whole scene also fades: in from black over the first 5 seconds, and back to
 black over seconds 45 to 53, which is
-9 seconds after the reveal ease ends, ending the intro on the held word
+9 seconds after the reveal ease ends, ending the intro on the dissolving word
 rather than an abrupt cut.
 
 The fade-in is short because the ascent means the intro opens on its darkest
@@ -406,12 +406,35 @@ rather than blending in a residual of it, since the extra density of points
 compressed onto a thin curve would otherwise amplify any residual into
 clumps.
 
+**The word is let go again.** The formation term is
+`smoothstep(30., 36., t) * (1. - smoothstep(41., 48., t))`, so after five seconds
+of hold the seek force unwinds and the word comes apart before the fade takes
+it. Handing a swarm packed onto thin strokes back to the pairwise force is
+precisely the failure the full override above exists to avoid, run deliberately
+and in reverse: at that density the short-range repulsion tears the strokes
+open, and the type attractions gather what is left into cells, so the logo
+dissolves into living creatures rather than drifting apart as a cloud. The
+velocity-driven brightness below flares the swarm while it breaks up, so the
+release answers the surge at thirty seconds without a scripted flash. It costs
+six bytes.
+
+Moving the letter targets outward instead - scaling `LetterTarget` up over the
+same window - was tried and rejected: the override stays in charge, so the word
+keeps its shape and merely grows past the edges of the frame, which reads as a
+push-in rather than a release.
+
+The release is deliberately not copied into the camera. The camera's free-swim
+azimuth is absolute, `t * .13`, so unwinding its reveal would swing the shot
+through six radians in seven seconds while the word was coming apart. The camera
+holds its pulled-back front-on view and lets the subject dissolve in front of
+it.
+
 **The hold is not a still frame.** Once the reveal completes, both camera angles
 would multiply out to exactly zero and the distance is constant, so with the
 particles settled onto their targets nothing but the background would move for
 the last five seconds before the fade. A much smaller oscillation therefore
 fades in as the free-swim orbit fades out, and the word keeps turning gently
-through the hold.
+through the hold and on through the release.
 
 That residual has to swing around zero rather than be a fraction of the
 free-swim term. Azimuth there is absolute, `t * .13`, so leaving even 4% of it

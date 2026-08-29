@@ -8,7 +8,7 @@
 //   6      species count, must match the palette in particles.vert.glsl
 //   .11    interaction radius
 //   .6     repulsion fraction of that radius, so 1. - .6 is its complement
-//   30..36 the seconds over which the word forms
+//   30..36 the seconds over which the word forms, 41..48 the release
 
 layout(local_size_x = 256) in;
 
@@ -133,17 +133,38 @@ void main() {
     }
 
     // The formation timeline: the cluster is the main effect, and the particles
-    // only ease into the word NUTS once, over the 30..36 second window, staying
-    // formed for the rest of the run. Those seconds must match the copies in
+    // ease into the word NUTS over the 30..36 second window, hold it, and are
+    // then let go again over 41..48, so the run ends on a release rather than
+    // on a dimmer switch. The 30..36 seconds must match the copy in
     // particles.vert.glsl, which eases the camera to a full-frame front-on view
     // over the same window.
-    float reveal = smoothstep(30., 36., t);
+    //
+    // The release is deliberately NOT copied into the camera. The camera's
+    // free-swim azimuth is absolute - t * .13 - so letting its reveal fall back
+    // to zero would swing the shot through six radians in seven seconds while
+    // the word was coming apart. The camera holds its pulled-back front-on view
+    // and lets the subject dissolve in front of it.
+    float reveal = smoothstep(30., 36., t) * (1. - smoothstep(41., 48., t));
     if (reveal > .001) {
         // A full override at reveal 1, not a blend that leaves some pairwise
         // force active: 16384 particles compressed onto a thin curve sit far
         // closer together than in the free-swimming sphere, so even a small
         // residual of that force is hugely amplified by the extra density and
         // breaks the letter shapes into clumps instead of smooth strokes.
+        //
+        // Unwinding that same blend is what makes the ending work. Handing the
+        // word back to the pairwise force at the density it was never tuned for
+        // is exactly the failure above, run deliberately and in reverse: the
+        // short-range repulsion tears the strokes open and the type attractions
+        // gather what is left into cells, so the logo comes apart into living
+        // creatures rather than simply drifting or blowing outward. Scaling the
+        // targets outward instead was tried, and reads as a push-in - the word
+        // keeps its shape and merely grows past the edges of the frame.
+        //
+        // The velocity-driven brightness in particles.vert.glsl flares the swarm
+        // while it breaks up, so the release answers the surge at thirty seconds
+        // without a scripted flash, and the master fade at 45..53 carries away
+        // what is left.
         force = mix(force, (LetterTarget(float(i)) - self.xyz) * 9., reveal);
     }
 
