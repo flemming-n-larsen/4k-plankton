@@ -22,13 +22,16 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // ocean texture is identical on every run. Change it to hear a different one.
 #define AUDIO_SEED 20260825u
 // Time between fresh swell targets; the envelope eases toward a new one over
-// this many samples rather than jumping, so the amplitude rise and fall
-// itself takes a couple of seconds, like a real wave set.
-#define SWELL_SAMPLES (SAMPLE_RATE * 2)
-// Slower than SWELL_SAMPLES: eases the foam/hiss amount between waypoints, so
-// the brightness of the ambience itself drifts over several seconds instead
-// of staying at one fixed mix.
-#define TEXTURE_SAMPLES (SAMPLE_RATE * 6)
+// this many samples instead of jumping, so the rise and fall itself takes
+// seconds, like a real wave set. Five, not the two it was: at two seconds a
+// new wave arrives faster than the ear reads one, and the ambience is busy
+// rather than moving.
+#define SWELL_SAMPLES (SAMPLE_RATE * 5)
+// Slower than SWELL_SAMPLES, and not a multiple of it, so the two envelopes
+// drift against each other instead of lining up: eases the foam/hiss amount
+// between waypoints, so the brightness of the ambience drifts over several
+// seconds instead of staying at one fixed mix.
+#define TEXTURE_SAMPLES (SAMPLE_RATE * 9)
 
 // ---------------------------------------------------------------------------
 // Tonal layer
@@ -235,10 +238,18 @@ static void* GenerateOcean(void) {
         tonal += Oscillator(4, pitch[7]) * accent * .18f;
         accent *= .99993f;
 
+        // The foam gate has a floor under it. Squaring the swell alone put the
+        // foam through a 94x range and silenced it outright for two seconds at
+        // a time whenever the waypoint landed near zero, which is what made the
+        // ambience read as washy instead of moving: the layer was not varying,
+        // it was switching off. The .2 keeps a bed of foam under the quietest
+        // swell, and the mix constants below are scaled by 1/1.4 to hold the
+        // same average foam-to-surf level, so only the evenness changes.
+        //
         // The surge opens the foam further than the level alone would, so the
-        // reveal arrives as a wash of white water rather than just louder surf.
+        // reveal arrives as a wash of white water instead of just louder surf.
         sample = (surf2 * (.25f + .7f * shaped)
-               + foam2 * shaped * shaped * (.72f + 2.88f * texture) * (1.f + 1.8f * surge)) * macro;
+               + foam2 * (.2f + .8f * shaped * shaped) * (.64f + 2.58f * texture) * (1.f + 1.8f * surge)) * macro;
         // Soft-knee saturation instead of a hard clamp: maps all of R into
         // (-1,1) smoothly, so loud swells round off instead of clipping. The
         // ambience gets its own knee before the tonal layer is added, so the
