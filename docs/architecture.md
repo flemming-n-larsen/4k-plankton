@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current direction for the PC in4k setup. It records constraints, boundaries, and decisions that should remain useful while the concrete framework and toolchain are still being evaluated.
+This document describes the architecture of **Plankton**, a PC in4k intro, and records the constraints, boundaries, and decisions behind it. Where an alternative approach does not work, the reason is kept next to the decision so it does not get retried.
 
 ## Goal
 
@@ -34,9 +34,9 @@ compatibility baseline:
 | Runtime | 5 minutes maximum |
 | Submission | Entry must include an information file |
 
-Two rules constrain the code rather than the packaging. The intro must render
+Two rules constrain the code, not the packaging. The intro must render
 correctly at both required resolutions, so every screen-space quantity is
-derived from the viewport rather than from pixel constants. And because both
+derived from the viewport, never from pixel constants. And because both
 compo machines must show the same thing, the simulation is advanced by measured
 wall-clock time rather than per frame, so it evolves at the same rate
 regardless of frame rate.
@@ -88,13 +88,13 @@ The initial stack is:
 
 CMake is not part of the initial baseline. The project is small, Windows-specific, and has a specialized generation and linking pipeline, so direct scripts keep every command and size-related option visible. CMake may be reconsidered if the project grows enough to benefit from it.
 
-NASM, Python, Sointu, and other generators are optional rather than baseline dependencies. They should be added only when a selected implementation requires them. In particular, choosing an audio backend may introduce its own editor, compiler, assembler, or code-generation step.
+NASM, Python, Sointu, and other generators are optional, not baseline dependencies. They should be added only when a selected implementation requires them. In particular, choosing an audio backend may introduce its own editor, compiler, assembler, or code-generation step.
 
 The Microsoft package retains the *Visual Studio Build Tools* product name, but it installs the compiler and SDK without requiring the Visual Studio IDE. Build scripts should initialize its command-line environment and invoke the tools directly. See [toolchain.md](toolchain.md) for the stack responsibilities and intended command interface.
 
 ## Architectural boundaries
 
-The intro should be organized around replaceable subsystems rather than a single framework-specific implementation:
+The intro should be organized around replaceable subsystems, not one framework-specific implementation:
 
 ```text
 intro logic
@@ -114,7 +114,7 @@ The project supports runtime-generated audio instead of embedding a WAV, MP3, or
 
 ### Ocean ambience
 
-The first audio milestone is a synthesized ocean ambience, matching the underwater visuals, with a tonal layer over it that gives the run a key without giving it a beat. It lives in its own translation unit, `src/audio.c` / `src/audio.h`, keeping the audio subsystem's boundary with platform and graphics code visible in the source layout rather than only in comments.
+The audio is a synthesized ocean ambience, matching the underwater visuals, with a tonal layer over it that gives the run a key without giving it a beat. It lives in its own translation unit, `src/audio.c` / `src/audio.h`, keeping the audio subsystem's boundary with platform and graphics code visible in the source layout rather than only in comments.
 
 `AudioStart()` synthesizes the whole run into one buffer at startup and plays it through `PlaySoundA` as a single shot, not a loop. There is no stop call: the intro ends by exiting the process, which stops playback anyway, so a teardown function would only cost bytes. `mmsystem.h` is excluded by `WIN32_LEAN_AND_MEAN`, so `PlaySoundA` is declared by hand rather than pulling in that header, matching the rest of the codebase's style. This satisfies the swappable-backend part of the audio boundary below; a stable playback position for visual sync is not implemented, since nothing in the intro currently needs to react to the audio.
 
@@ -126,15 +126,15 @@ The synthesis itself is a small DSP loop, not a sample or a tracker song:
 - A second, slower waypoint (roughly six seconds apart) eases the amount of foam mixed in, so the ambience's brightness itself drifts between calmer and hissier over time.
 - The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp, so loud swells round off instead of clipping.
 - A scripted macro envelope over the top of those random swells follows the picture: quiet and close while the water is deep, opening out across the ascent, surging as the particles let go at thirty seconds, settling again over the held word, and fading with the image between forty-eight and fifty-six seconds. The surge opens the foam further than the level alone does, so the reveal arrives as a wash of white water rather than merely louder surf. Measured per-second RMS, as a fraction of the run's loudest second, runs about 0.04 through the deep opening, 0.24 by second twelve, 0.62 by second twenty-five, peaks at 1.00 during the migration and holds around 0.78 over the word before the fade takes it down. These windows are a fifth copy of the visual timeline and must be kept in step by hand.
-- The buffer is one shot covering the whole run rather than a short loop, which is what allows an envelope written against the clock, and it needs no crossfade at all. It is generated longer than `END_SECONDS` because audio plays in real time while the visuals are driven by `sim_time`: a machine that cannot hold 60 Hz stretches the picture against the sound, and the margin keeps the sound from running out first. A looped buffer was immune to that and this one is not, which is the price of having anything happen in the audio at a specific moment.
+- The buffer is one shot covering the whole run rather than a short loop, which allows an envelope written against the clock, and it needs no crossfade at all. It is generated longer than `END_SECONDS` because audio plays in real time while the visuals are driven by `sim_time`: a machine that cannot hold 60 Hz stretches the picture against the sound, and the margin keeps the sound from running out first. A looped buffer was immune to that and this one is not, which is the price of having anything happen in the audio at a specific moment.
 - Generation writes 16-bit samples straight into the block handed to the player, with no float scratch buffer and no second allocation.
-- The 44-byte RIFF header is a table of eleven literal little-endian words copied into place, rather than a packed struct filled in field by field.
+- The 44-byte RIFF header is a table of eleven literal little-endian words copied into place, not a packed struct filled in field by field.
 - Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
 
 The tonal layer sits on top of that bed:
 
-- Sine voices come from a magic-circle oscillator, `y += k * z; z -= k * y` with `k = 2*PI*f / SAMPLE_RATE`. It is a symplectic rotation, so its amplitude neither decays nor grows across the whole run - no lookup table, no renormalisation, and no `sinf`, which `/NODEFAULTLIB` has no library for. Its output starts at zero, so a voice entering mid-run enters silently, and `k` can be changed at any sample without disturbing the phase, which is what makes the chord changes click-free. The small-angle `k` puts the true frequency out by `k*k/24`, which is 0.002% at the pad pitches and 0.12% at the accent.
-- Three sustained voices play a five-chord progression in D minor - Dm, Dm/F, B-flat, F, Dm - changing at seconds 6, 16, 24, 30 and 38, so the harmony resolves brighter across the ascent and settles home under the held word. The voices sit in D3 to D4, above the surf body and below the foam band, so the chord occupies a gap in the ambience's spectrum rather than fighting it. No voice moves by more than a whole step at any change, which is what keeps an instantaneous pitch step reading as a chord change rather than a jump. Six distinct pitches serve fifteen chord slots, so the chords are stored as byte indices into a pitch table rather than as a flat grid of floats.
+- Sine voices come from a magic-circle oscillator, `y += k * z; z -= k * y` with `k = 2*PI*f / SAMPLE_RATE`. It is a symplectic rotation, so its amplitude neither decays nor grows across the whole run - there is no lookup table to store, nothing to renormalise, and no `sinf`, which `/NODEFAULTLIB` has no library for. Its output starts at zero, so a voice entering mid-run enters silently, and `k` can be changed at any sample without disturbing the phase, which is what makes the chord changes click-free. The small-angle `k` puts the true frequency out by `k*k/24`, which is 0.002% at the pad pitches and 0.12% at the accent.
+- Three sustained voices play a five-chord progression in D minor - Dm, Dm/F, B-flat, F, Dm - changing at seconds 6, 16, 24, 30 and 38, so the harmony resolves brighter across the ascent and settles home under the held word. The voices sit in D3 to D4, above the surf body and below the foam band, so the chord occupies a gap in the ambience's spectrum rather than fighting it. No voice moves by more than a whole step at any change, which keeps an instantaneous pitch step reading as a chord change rather than a jump. Six distinct pitches serve fifteen chord slots, so the chords are stored as byte indices into a pitch table rather than as a flat grid of floats.
 - The pad is multiplied by the same macro envelope as the water, so it swells with the ascent and lifts at the reveal instead of sitting at one level and flattening the run's dynamics.
 - A sub at D2 enters between seconds 29 and 32 and leaves over seconds 43 to 53, so the reveal arrives with weight on a hall system rather than as nothing but more foam. A single tone at D5 is struck on the sample the word forms and decayed by a repeated multiply - an exponential with a 0.65 second time constant and no `expf`.
 - The layer carries no rhythm and no melody by choice. The visuals are driven by `sim_time` and the audio by the sound card, so anything rhythmic could drift against the picture on a machine that cannot hold 60 Hz; sustained harmony cannot.
@@ -142,9 +142,9 @@ The tonal layer sits on top of that bed:
 
 None of this needs the CRT: the PRNG and filters are pure integer/float arithmetic, and every float-to-integer conversion casts through a signed `int` rather than `unsigned`, since a direct float-to-unsigned cast pulls in a CRT helper that `/NODEFAULTLIB` has no library for.
 
-### Open audio questions
+### Why no synthesizer
 
-The hand-written synthesis was extended with the tonal layer above rather than replaced, so none of the following are needed at the current scope. They remain the options if the intro ever wants a real score - a sequenced, multi-instrument piece - which the byte budget does not currently justify:
+The hand-written synthesis was extended with the tonal layer above rather than replaced. The following were considered and are not needed at this scope; they remain the options if the intro ever wants a sequenced, multi-instrument score, which the byte budget does not currently justify:
 
 - [Sointu](https://github.com/vsariola/sointu), a 4klang-derived synthesizer with x86 output and a song-to-assembly compiler;
 - [4klang](https://github.com/gopher-atz/4klang), the established VSTi and assembly-based workflow;
@@ -154,36 +154,45 @@ The hand-written synthesis was extended with the tonal layer above rather than r
 
 The eventual decision should be based on the compressed size of the complete intro, sound quality, CPU/GPU cost, synchronization quality, development workflow, and toolchain reproducibility.
 
-## Framework-selection criteria
+## Framework
 
-The intro/framework should be evaluated against these criteria:
+No external framework is used. The intro is a minimal native Win32/OpenGL
+executable with hand-written platform, graphics and audio code, which was chosen
+against these criteria:
 
 - final Crinkler-compressed size, including platform setup, graphics, audio, and data;
 - compatibility with the intended Windows systems and competition machine;
 - fast development and debugging workflow;
-- ability to produce a larger safe build and a minimal compo build;
 - clear integration points for generated shader and music data;
 - reproducible builds with pinned tool versions;
 - no runtime dependencies that the competition machine will not provide.
 
-The framework is not selected yet. The project should preserve the ability to compare a minimal native framework, an existing 4k framework, and a more specialized audio or shader approach before committing.
+An existing 4k framework and a shader-audio framework were both considered. At
+the size the intro actually reached, neither pays for itself: the platform layer
+is under a hundred lines and the whole executable is well inside the limit, so a
+framework would add a dependency and a build step to solve a problem the project
+does not have.
 
 ## Build variants
 
-The project should plan for separate build variants from the beginning:
+There are two:
 
-- **Debug** — development diagnostics and convenient iteration.
-- **Safe** — compatibility-oriented executable for testing and distribution outside the compo environment.
-- **Compo** — aggressively size-optimized executable intended to meet the 4096-byte limit.
+`Debug` runs in a window, reports shader compile and link failures, captures
+frames, and records the run. Pass `-MinifyShaders` and it compiles the same
+shader text the Compo build uses. `Compo` is the size-optimized executable: it
+links through Crinkler and fails the build above 4096 bytes.
 
-The compo build must not be treated as the only artifact. A safe build is useful for diagnosing compatibility problems introduced by aggressive size optimizations or executable packing.
+The Compo build is not the only artifact. Debug is what a change is measured
+against: it renders identical frames, writes the generated `ocean.wav`, and can
+capture a reproducible frame at an exact simulation step, none of which the
+Compo build can do.
 
-## Bootstrap milestone
+## The intro
 
-The bootstrap milestone is a CRT-free Win32/x86 executable running a 3D
-[Particle Life](https://particle-life.com/) simulation on the GPU, titled
-**Plankton** after the drifting swarm it depicts, with a
-synthesized ocean ambience (see Audio direction below). GLSL source is kept
+Plankton is a CRT-free Win32/x86 executable running a 3D
+[Particle Life](https://particle-life.com/) simulation on the GPU, named after
+the drifting swarm it depicts, with synthesized audio (see Audio direction
+below). The run is 59 seconds long. GLSL source is kept
 readable under `src/shaders/` for Debug and minified into generated C strings
 for Compo. It has no external graphics framework or runtime dependency beyond
 the Windows system libraries, the OpenGL driver, and `winmm.dll` for audio
@@ -191,12 +200,11 @@ playback.
 
 **Debug** runs in a normal window and reports shader compile and link failures.
 **Compo** runs in a borderless primary-monitor window, links with Crinkler, and
-fails the build if the executable exceeds 4096 bytes. The planned **Safe**
-variant begins after this path is validated.
+fails the build if the executable exceeds 4096 bytes.
 
 ### Platform layer
 
-The window uses the predefined `"static"` class rather than one registered by
+The window uses the predefined `"static"` class instead of one registered by
 the intro. That class already supplies a window procedure, so there is no
 `RegisterClassA` call, no class name string, no instance handle, and no window
 procedure of our own. The intro never acts on a message - it ends on Escape or
@@ -221,7 +229,7 @@ ever changes.
 
 16384 particles of 6 types are held in a single shader storage buffer as a flat
 `vec4` array: particle *n* occupies `v[n * 2]` (position, with `.w` carrying the
-type index) and `v[n * 2 + 1]` (velocity). A flat array rather than an array of
+type index) and `v[n * 2 + 1]` (velocity). A flat array instead of an array of
 two-`vec4` structs because Shader Minifier is run with `--preserve-externals`,
 which protects the block and its field names - the struct and the long field
 names would survive minification at every use site.
@@ -251,7 +259,7 @@ Three decisions are worth recording:
   not accumulated by repeated addition, since the accumulated float drifts
   against a multiplied time and costs a step at the comparison boundary.
   `MAX_CATCHUP` bounds the catch-up loop, so a machine that cannot keep up plays
-  the same intro slightly slowly rather than a different one. Verified by
+  the same intro slightly slowly, not a different one. Verified by
   comparing captures from the synthetic fixed-rate `-shot` path against the
   wall-clock `-live` path at the same time index: byte-identical.
 - **A type always attracts itself.** With a purely random matrix, 3D Particle
@@ -304,7 +312,7 @@ per-particle distance fade, so overall brightness does not track camera distance
 
 A box-shaped containment volume would be the other way to reach the corners, and
 it would light them more evenly, since a ray toward a corner passes through the
-full depth of a box rather than grazing a sphere. It is rejected because a
+full depth of a box instead of grazing a sphere. It is rejected because a
 world-axis-aligned box shows flat faces and straight silhouette edges that sweep
 across frame as the camera orbits - it reads as a tank rather than open water -
 and it would flatten cells against the faces and pile them in the corners.
@@ -335,7 +343,7 @@ runs 25.7 at five seconds, 44.7 at twenty and 76.6 at forty.
 
 The free-swimming cluster is the main effect. Once, over the 30-to-36-second window,
 the cluster dissolves into the word NUTS
-and stays formed for the rest of the run - a finale rather than a recurring
+and stays formed for the rest of the run: a finale, not a recurring
 event. The same `smoothstep(30., 36., t)` is duplicated in
 `particles.comp.glsl` (which moves the particles) and `particles.vert.glsl`
 (which eases the camera to a front-on view over the same seconds and pulls it
@@ -366,7 +374,7 @@ frame, and the target venue is a projector in a blacked-out hall. Modelling one
 nearer 2.5 than the 2.2 the frame is authored for - costs roughly a fifth of the
 midtones: a frame whose median code value is 50 on a monitor lands near 40 on
 the projector. The deep-water look survives that comfortably, because what
-carries it is bright points against black rather than shadow detail. What did
+carries it is bright points against black, not shadow detail. What did
 not survive was the opening: over an 8-second fade the frame at 2 seconds was
 90% below code value 16, which is an empty screen for the first seconds of a
 compo entry. At 5 seconds the same frame reads clearly as a swarm in deep water.
@@ -399,7 +407,7 @@ by hashing its own index (kept well under the argument magnitude where GPU
 `sin()` range reduction stays precise, to avoid aliasing distinct indices
 onto the same output), so the same particle always seeks the same spot;
 a perpendicular jitter of +/-.05 in font units gives each stroke real width,
-enough that the strokes read as solid bodies rather than wires and the
+enough that the strokes read as solid bodies instead of wires and the
 counters of N, U and S close up;
 during the hold, that force fully replaces the Particle Life pairwise force
 rather than blending in a residual of it, since the extra density of points
@@ -413,13 +421,13 @@ it. Handing a swarm packed onto thin strokes back to the pairwise force is
 precisely the failure the full override above exists to avoid, run deliberately
 and in reverse: at that density the short-range repulsion tears the strokes
 open, and the type attractions gather what is left into cells, so the logo
-dissolves into living creatures rather than drifting apart as a cloud. The
+dissolves into living creatures instead of drifting apart as a cloud. The
 velocity-driven brightness below flares the swarm while it breaks up, so the
 release answers the surge at thirty seconds without a scripted flash. It costs
 six bytes.
 
 Moving the letter targets outward instead - scaling `LetterTarget` up over the
-same window - was tried and rejected: the override stays in charge, so the word
+same window - does not work: the override stays in charge, so the word
 keeps its shape and merely grows past the edges of the frame, which reads as a
 push-in rather than a release.
 
@@ -436,7 +444,7 @@ the last stretch of the run before the fade. A much smaller oscillation therefor
 fades in as the free-swim orbit fades out, and the word keeps turning gently
 through the hold and on through the release.
 
-That residual has to swing around zero rather than be a fraction of the
+That residual has to swing around zero, not be a fraction of the
 free-swim term. Azimuth there is absolute, `t * .13`, so leaving even 4% of it
 would put the camera 10.7 degrees off axis by the time the word lands and still
 climbing - against the word's half-width that spreads the letters across depths
@@ -450,27 +458,26 @@ for a static camera.
 **The swarm pulses.** `particles.vert.glsl` multiplies each particle's colour
 by a flash keyed to its species: `.5 + .5 * sin(t * 1.2566 + type * 1.0472)`,
 cubed, so the six species light and go dark in turn a sixth of a cycle apart
-over a five-second period. This addresses the run's weakest stretch - the
-twenty-four seconds of free swim before the reveal, in which the camera orbits
-and the light slowly grows and nothing else happens.
+over a five-second period. It fills the run's emptiest stretch, the twenty-four
+seconds of free swim in which the camera orbits and the light slowly grows and
+nothing else happens.
 
-Keying it to the species rather than to the particle index is what makes it read
-as bioluminescence rather than as noise: the pairwise force sorts each species
-into its own spatially coherent cell, so whole regions of the swarm light in
-sequence and the light travels through the cluster as a wave. Keyed to the index
-it would only be a uniform per-particle flicker.
+Keying the flash to the species instead of to the particle index is what makes
+it read as bioluminescence. The pairwise force sorts each species into its own
+spatially coherent cell, so whole regions light in sequence and the light
+travels through the cluster as a wave. Keyed to the index it is a uniform
+per-particle flicker.
 
-The cubing matters as much as the phase. A plain sine was tried first and is
-invisible - it spends most of its time near the middle, and with the six phases
-evenly spread the frame's total light never changes, so the eye reads a slow
-reshuffle of which species is brightest rather than anything pulsing. Measured
-against the scene's own drift between seconds 15 and 18, the sine moved the
-red-tide species' emitted light by 1.7x where the cubed flash moves it by 4.5x.
-The mean of the cubed shape is exactly 5/16, so `.35 + 2.08 * pulse` averages to
-one and the flash costs no exposure; measured mean frame luminance falls 2.5 to
-3.5%, the bright peaks clipping in the dense cell cores. It is written as a
-deviation from one so the reveal can damp it to a quarter with a single
-multiply, since a strobing logo fights legibility and the speed accent below
+The cubing matters as much as the phase. A plain sine is invisible: it sits near
+its middle most of the time, and with six phases spread evenly the frame's total
+light never changes, so the eye reads a slow reshuffle of which species is
+brightest instead of a pulse. Against the scene's own drift between seconds 15
+and 18, the sine moves the red-tide species' emitted light by 1.7x and the cubed
+flash by 4.5x. The cubed shape's mean is exactly 5/16, so `.35 + 2.08 * pulse`
+averages to one and the flash costs no exposure; measured mean frame luminance
+falls 2.5 to 3.5%, the bright peaks clipping in the dense cell cores. Writing it
+as a deviation from one lets the reveal damp it to a quarter with a single
+multiply, since a strobing logo hurts legibility and the speed accent below
 already owns that moment.
 
 **The reveal accents itself.** `particles.vert.glsl` scales each particle's
@@ -490,7 +497,7 @@ A third program draws the background before the points, giving an underwater
 setting:
 a vertical gradient from deep navy to lit teal, a moving caustic ridge pattern,
 and god rays converging on a sun point above the top edge, all built from a
-handful of `sin`/`atan` terms in normalized `[0,1]` screen space rather than
+handful of `sin`/`atan` terms in normalized `[0,1]` screen space instead of
 any texture or 3D geometry - this costs about 280 bytes for the whole effect.
 Blending is disabled while it draws, since it covers every pixel of the
 viewport and would otherwise accumulate additively over whatever was left in
@@ -522,7 +529,7 @@ from world up, so screen-vertical is world-vertical. The grid is built on an
 aspect-corrected copy of the screen coordinate, without which the cells would be
 16:9 wide and every bubble a visible ellipse.
 
-Each bubble is an annulus rather than a filled disc. A filled blob reads as
+Each bubble is an annulus, not a filled disc. A filled blob reads as
 out-of-focus dust; a bright rim around a dark middle reads as a bubble catching
 the light from above. Only cells hashing above a threshold carry one, so the
 water is not a uniform lattice, and a second hash decorrelates vertical placement
@@ -538,7 +545,7 @@ of creatures, which is the point of the shot.
 
 The particle palette is a literal six-entry table in `particles.vert.glsl`,
 `PLANKTON`, indexed directly by the particle's type - one colour per type, so
-the cells read as distinct organisms rather than shades of one hue. The six are
+the cells read as distinct organisms instead of shades of one hue. The six are
 drawn from real ocean life: copepod teal, bioluminescent cyan, algal sea green,
 cyanobacterial deep blue, red-tide dinoflagellate red, and diatom gold. The
 entry count is coupled to the species count in `particles.comp.glsl`. A cosine gradient
@@ -549,7 +556,7 @@ water absorbs colour with depth; this is what keeps the two warm entries from
 reading as foreign at the back of the cluster.
 
 The per-particle distance fade and the master fade are both folded into that
-colour in the vertex shader rather than passed to the fragment shader as a
+colour in the vertex shader instead of passed to the fragment shader as a
 second varying. A point sprite has a single vertex, so one interpolated colour
 is exactly what a separate colour and fade would have multiplied out to. The
 fragment shader likewise clamps its sprite falloff at zero instead of
@@ -594,12 +601,12 @@ Crinkler compression and linking
 final executable and size report
 ```
 
-PowerShell exposes stable Debug and Compo commands for the bootstrap milestone; Safe is added when compatibility behavior exists to validate. Coding agents and human developers should use those same commands; builds must not depend on IDE projects, IDE state, or manually configured editor tasks.
+PowerShell exposes stable Debug and Compo commands. Coding agents and human developers should use those same commands; builds must not depend on IDE projects, IDE state, or manually configured editor tasks.
 
 The concrete installation and invocation details will be added to [toolchain.md](toolchain.md) as the build is implemented. Tool versions, discovery rules, expected paths, compiler flags, Crinkler options, and generated-file policy must be pinned there once validated.
 
-## Open decisions
+## Decisions taken
 
-- Which audio backend and composition workflow to use.
-- Whether audio playback should use DirectSound or another Windows API.
-- Which generated files belong in source control and which should be rebuilt.
+- **Audio backend**: hand-written DSP in `src/audio.c`, no synthesizer library and no embedded sample. See Audio direction above.
+- **Playback API**: `PlaySoundA` from `winmm.dll`, one shot, no loop and no teardown. DirectSound was not needed: nothing in the intro reads a playback position, and `PlaySoundA` is a single import against a buffer the intro already owns.
+- **Generated files**: none are tracked. `out/` holds the executables, the Crinkler report and the generated shader headers; `.tools/` holds local third-party tools; `frames/` and `ocean.wav` are Debug output. All are rebuilt from source and ignored by Git.

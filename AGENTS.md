@@ -2,9 +2,9 @@
 
 ## Project
 
-This repository develops a native PC in4k intro: a Windows executable intended to fit within a 4,096-byte competition limit.
+This repository develops **Plankton**, a native PC in4k intro: a Windows executable that must fit within a 4,096-byte competition limit.
 
-The current bootstrap is a CRT-free Win32/x86 OpenGL fullscreen-triangle shader. Audio is intentionally deferred and must remain behind the planned audio abstraction.
+It is a CRT-free Win32/x86 executable running a 3D Particle Life simulation in an OpenGL compute shader, drawn as additive point sprites over a procedural underwater background, with runtime-synthesized audio. The run is 59 seconds. Audio is implemented in `src/audio.c` and must stay behind the `src/audio.h` boundary.
 
 ## Build workflow
 
@@ -31,8 +31,8 @@ The current bootstrap is a CRT-free Win32/x86 OpenGL fullscreen-triangle shader.
 
 ## Code guidelines
 
-- Keep the Compo path free of CRT, standard-library, audio, and unnecessary runtime dependencies unless explicitly justified.
-- Prefer Win32/OpenGL and small, direct implementations while the bootstrap milestone is being extended.
+- Keep the Compo path free of CRT, standard-library, and unnecessary runtime dependencies unless explicitly justified.
+- Prefer Win32/OpenGL and small, direct implementations.
 - Preserve clean boundaries between platform, graphics, audio, generated data, and build/packaging code.
 - Do not add CMake, an IDE project, or an external framework without updating the architecture documentation first.
 

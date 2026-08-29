@@ -1,22 +1,26 @@
-# Plankton — a PC in4k
+# Plankton, a PC in4k
 
 This project is about creating the setup required to make a PC in4k (4,096-byte intro) for competing in a 4k intro scene competition. The intro itself is titled **Plankton**.
 
 The goal is to provide a practical starting point for developing, building, and packaging a very small Windows intro, where the final executable must fit within the competition's 4 KiB limit.
 
-## Architecture direction
+## Architecture
 
-The current implementation direction is a native Win32/x86 intro built through a size-optimized toolchain. The exact framework and competition target will be validated against the rules of the selected party.
+Plankton is a native Win32/x86 intro built through a size-optimized toolchain, with no external framework. It targets the TRSAC 4 KB compo; the party's rules and compo machine are authoritative and are checked before the release build.
 
-The project uses a headless command-line toolchain. It does not require Visual Studio or Visual Studio Code. Compilation uses the standalone Microsoft C++ Build Tools and Windows SDK, driven directly by PowerShell scripts, with Crinkler performing the final linking and executable compression. CMake is not part of the initial baseline.
+The project uses a headless command-line toolchain. It does not require Visual Studio or Visual Studio Code. Compilation uses the standalone Microsoft C++ Build Tools and Windows SDK, driven directly by PowerShell scripts, with Crinkler performing the final linking and executable compression. CMake is not used.
 
-The first implementation milestone is a CRT-free Win32/x86 executable running a 3D [Particle Life](https://particle-life.com/) simulation: 16,384 particles of 6 types are stepped by an OpenGL compute shader and drawn as additive point sprites, one plankton colour per type - teal, cyan, sea green, deep blue, red-tide red, and diatom gold, with the attraction matrix and starting positions generated procedurally in the shader so no data is embedded. The camera swims inside the swarm rather than watching it from outside, so creatures fill the frame to every corner with no visible edge to the cluster. Each species also flashes and goes dark in turn on a five-second cycle, so the light travels through the swarm as a wave. A fullscreen background pass gives an underwater setting - a depth gradient, moving caustics, god rays, and rising bubbles - all procedural, no textures. A synthesized ocean ambience plays underneath, generated at runtime from noise and filters rather than embedded as a sound file, with a tonal layer over it - three sine voices moving through a slow chord progression in D minor, a sub under the reveal, and a single struck tone as the word forms.
+Plankton is a CRT-free Win32/x86 executable running a 3D [Particle Life](https://particle-life.com/) simulation. 16,384 particles of 6 types are stepped by an OpenGL compute shader and drawn as additive point sprites, one plankton colour per type: teal, cyan, sea green, deep blue, red-tide red, and diatom gold. The attraction matrix and the starting positions are generated in the shader, so no data is embedded. The camera swims inside the swarm instead of watching it from outside, so creatures fill the frame to every corner with no visible edge to the cluster. Each species also flashes and goes dark in turn on a five-second cycle, so the light travels through the swarm as a wave.
 
-The run is an ascent. It opens deep and near-black, with bioluminescent organisms glowing against dark water, and rises toward the surface over the next forty seconds: the light grows, the caustics and god rays strengthen, the plankton recover the colour that depth was absorbing, and bubbles stream past throughout. At 30 seconds the camera pulls back out of the swarm and the cluster dissolves into a full-frame word NUTS - drawn as lines and circular arcs, not a bitmap - with the particles glowing brighter the faster they move, so the formation arrives as a surge that decays as they settle, and the ambience surging with it. The word holds for eight seconds and is then let go: the swarm is handed back to the pairwise force, which tears the strokes apart and gathers them into cells, so the logo dissolves back into living creatures. The scene fades to black over the same stretch, and the Compo build exits on its own a few seconds into the black, rather than sitting there until the operator intervenes. It targets the [TRSAC](https://trsac.dk/realtime-compos/#compo4) 4 KB compo. Its Compo build must be Crinkler-compressed to 4,096 bytes or less. Exact versions and integrity checks are defined in [tools.lock.json](tools.lock.json); see [docs/toolchain.md](docs/toolchain.md) for installation and version-update rules.
+A fullscreen background pass gives an underwater setting: a depth gradient, moving caustics, god rays, and rising bubbles, all procedural, no textures. Underneath it, a synthesized ocean ambience is generated at runtime from noise and filters instead of embedded as a sound file, with a tonal layer over the top. That layer is three sine voices moving through a slow chord progression in D minor, a sub under the reveal, and a single struck tone as the word forms.
+
+The run is an ascent. It opens deep and near-black, with bioluminescent organisms glowing against dark water, and rises toward the surface over the next forty seconds: the light grows, the caustics and god rays strengthen, the plankton recover the colour that depth was absorbing, and bubbles stream past throughout.
+
+At 30 seconds the camera pulls back out of the swarm and the cluster resolves into a full-frame word NUTS, drawn as lines and circular arcs, not a bitmap. Particles glow brighter the faster they move, so the formation arrives as a surge that decays as they settle, with the ambience surging under it. The word holds for eight seconds and is then let go: the swarm is handed back to the pairwise force, which tears the strokes apart and gathers them into cells, so the logo dissolves back into living creatures. The scene fades to black over the same stretch, and the Compo build exits on its own a few seconds into the black instead of sitting there until the operator intervenes. It targets the [TRSAC](https://trsac.dk/realtime-compos/#compo4) 4 KB compo. Its Compo build must be Crinkler-compressed to 4,096 bytes or less. Exact versions and integrity checks are defined in [tools.lock.json](tools.lock.json); see [docs/toolchain.md](docs/toolchain.md) for installation and version-update rules.
 
 The audio is hand-written DSP throughout - noise, filters, and a handful of oscillators - with no synthesizer library, no sequencer, and no embedded sample. A full score remains a separate, still-open decision; candidates include [Sointu](https://github.com/vsariola/sointu), [4klang](https://github.com/gopher-atz/4klang), [Oidos](https://github.com/askeksa/Oidos), and shader-based audio. See [docs/architecture.md](docs/architecture.md) for the reasoning behind the synthesis.
 
-The broader architecture, framework-selection criteria, build variants, and open decisions are documented in [docs/architecture.md](docs/architecture.md). The concrete command-line stack and its responsibilities are documented in [docs/toolchain.md](docs/toolchain.md).
+The broader architecture, the build variants, and the decisions behind them are documented in [docs/architecture.md](docs/architecture.md). The concrete command-line stack and its responsibilities are documented in [docs/toolchain.md](docs/toolchain.md).
 
 ## Build and run
 
@@ -97,12 +101,12 @@ The [in4k knowledge base](https://in4k.github.io/) is a good introduction to the
 
 ## Relevant tools and references
 
-- [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) — the standalone MSVC compiler toolchain; the Visual Studio IDE is not required.
-- [MSVC command-line documentation](https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line) — compiler environment and direct command-line build guidance.
-- [Crinkler](https://github.com/runestubbe/Crinkler) — a compressing linker for small Windows demoscene executables. It is used to link the intro and compact the resulting executable.
-- [Crinkler manual](https://github.com/runestubbe/Crinkler/blob/master/doc/manual.txt) — usage instructions, linker options, and compression details.
-- [Shader Minifier](https://github.com/laurentlb/shader-minifier) — minifies GLSL shader source for the Compo build while keeping readable shader source for development.
-- [in4k Crinkler notes](https://in4k.github.io/wiki/crinkler) — background on the compression and linking techniques used by Crinkler.
-- [Sointu](https://github.com/vsariola/sointu) — a modern, cross-platform 4klang-derived synthesizer candidate that can compile x86 music code to assembly.
-- [Oidos](https://github.com/askeksa/Oidos) — an additive synthesizer for very small executables, with a Renoise-based workflow.
-- [Lev4k shader audio](https://github.com/TheNuSan/Lev4k) — an example 4k framework supporting shader-based audio as well as 4klang and Oidos.
+- [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/): the standalone MSVC compiler toolchain; the Visual Studio IDE is not required.
+- [MSVC command-line documentation](https://learn.microsoft.com/en-us/cpp/build/building-on-the-command-line): compiler environment and direct command-line build guidance.
+- [Crinkler](https://github.com/runestubbe/Crinkler): a compressing linker for small Windows demoscene executables. It is used to link the intro and compact the resulting executable.
+- [Crinkler manual](https://github.com/runestubbe/Crinkler/blob/master/doc/manual.txt): usage instructions, linker options, and compression details.
+- [Shader Minifier](https://github.com/laurentlb/shader-minifier): minifies GLSL shader source for the Compo build while keeping readable shader source for development.
+- [in4k Crinkler notes](https://in4k.github.io/wiki/crinkler): background on the compression and linking techniques used by Crinkler.
+- [Sointu](https://github.com/vsariola/sointu): a modern, cross-platform 4klang-derived synthesizer candidate that can compile x86 music code to assembly.
+- [Oidos](https://github.com/askeksa/Oidos): an additive synthesizer for very small executables, with a Renoise-based workflow.
+- [Lev4k shader audio](https://github.com/TheNuSan/Lev4k): an example 4k framework supporting shader-based audio as well as 4klang and Oidos.

@@ -77,10 +77,10 @@ Compiler and linker commands should remain visible in build output so size regre
 | Crinkler | `/COMPMODE:VERYSLOW /TINYHEADER /TINYIMPORT /ORDERTRIES:10000` | `/TINYHEADER` and `/TINYIMPORT` together are worth about 100 bytes. `/UNSAFEIMPORT` adds nothing on top of `/TINYIMPORT`. `/ORDERTRIES` plateaus at 10000 - higher values cost build time without shrinking further - and `/HASHTRIES` does not help. |
 
 `/TINYHEADER` and `/TINYIMPORT` trade loader robustness for size, so any change
-to them must be validated by running the Compo executable, not only by building
+to them must be validated by running the Compo executable, rather than by building
 it. `/ORDERTRIES:10000` makes a Compo link take roughly 20 seconds.
 
-## Why not CMake initially?
+## Why not CMake?
 
 CMake is useful for portable projects and larger dependency graphs, but it is not necessary to invoke a compiler. This project currently targets one platform and has an unusual final link step. A small PowerShell driver gives the project a reproducible build without generating Visual Studio projects or hiding the exact Crinkler invocation.
 
@@ -88,9 +88,10 @@ This decision can be revisited if additional platforms, tools, or source targets
 
 ## Alternative compiler
 
-LLVM's `clang-cl` may be evaluated later because it can emit Windows COFF object files and offers an MSVC-compatible command-line interface. It is not the baseline until a complete intro has been compiled and linked successfully with Crinkler and tested on the competition target. MinGW/GCC is likewise outside the initial baseline because it may introduce avoidable ABI, runtime, and import-library differences.
+LLVM's `clang-cl` may be evaluated later because it can emit Windows COFF object files and offers an MSVC-compatible command-line interface. It is not the baseline: MSVC has compiled and linked the finished intro with Crinkler inside the size limit, so switching would mean re-verifying every size-critical option below for no known gain. MinGW/GCC is likewise not used, because it may introduce avoidable ABI, runtime, and import-library differences.
 
-## Deferred implementation details
+## Generated files
 
-- decide whether generated source and binary data belong in source control;
-- add any audio-specific tools only after choosing an audio backend.
+Nothing generated is tracked. The minified shader headers, the executables, the Crinkler report and the size and toolchain reports are written under `out/`; `.tools/` holds local third-party tools; the Debug build writes `ocean.wav` and, when recording, `frames/`. All are rebuilt from source and ignored by Git.
+
+No audio-specific tools are needed: the audio is hand-written DSP compiled from `src/audio.c`, with no synthesizer, tracker, or conversion step in the build.
