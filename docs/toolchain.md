@@ -23,16 +23,17 @@ When upgrading a tool, build and run the current Debug and Compo artifacts first
 
 ## Baseline stack
 
-| Component | Responsibility | Required initially |
-| --- | --- | --- |
-| Standalone Microsoft C++ Build Tools | Provide the MSVC compiler (`cl.exe`) targeting Win32/x86 | Yes |
-| Windows SDK | Provide Windows headers and import libraries | Yes |
-| PowerShell | Drive reproducible build variants and tool discovery | Yes |
-| Shader Minifier | Minify release shaders | Yes |
-| Crinkler | Link object files, compress the executable, and report final size | Yes |
-| NASM | Assemble generated or hand-written assembly | Only if the selected implementation needs it |
-| Audio tools such as Sointu | Compose or generate procedural music code and data | Only after an audio backend is selected |
-| Python | Run a generator that specifically requires Python | Only if needed |
+| Component | Responsibility | By | Required |
+| --- | --- | --- | --- |
+| Standalone Microsoft C++ Build Tools | Provide the MSVC compiler (`cl.exe`) targeting Win32/x86 | Microsoft | Yes |
+| Windows SDK | Provide Windows headers and import libraries | Microsoft | Yes |
+| PowerShell | Drive reproducible build variants and tool discovery | Microsoft | Yes |
+| Shader Minifier | Minify release shaders | Laurent Le Brun (LLB / Ctrl-Alt-Test) and contributors, Apache-2.0 | Yes |
+| Crinkler | Link object files, compress the executable, and report final size | Rune L. H. Stubbe (Mentor/TBC) and Aske Simon Christensen (Blueberry/Loonies), zlib | Yes |
+| ffmpeg | Encode captured frames into video | the FFmpeg project | Only for recording, not for the intro |
+| NASM | Assemble generated or hand-written assembly | | No, nothing here is hand-written assembly |
+| Audio tools such as Sointu | Compose or generate procedural music code and data | | No, the audio is hand-written DSP |
+| Python | Run a generator that specifically requires Python | | No |
 
 Despite its name, the standalone *Visual Studio Build Tools* package is not the Visual Studio IDE. Only its C++ build tools workload and a compatible Windows SDK are needed. MSVC supports direct command-line compilation, including using an x64-hosted compiler to produce x86 object files.
 
