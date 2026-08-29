@@ -196,7 +196,7 @@ static void* GenerateOcean(void) {
         int section, voice;
         // Seconds into the run, which is what the macro envelope is written
         // against. These four windows must stay in step with the shaders: 6..30
-        // is the ascent, 30 is when the particles let go, and 45..53 is the
+        // is the ascent, 30 is when the particles let go, and 48..56 is the
         // master fade.
         float second = (float)i * (1.f / SAMPLE_RATE);
         float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
@@ -204,7 +204,7 @@ static void* GenerateOcean(void) {
         float macro = arc + .6f * surge;
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
-        float fade = 1.f - Smoothstep(45.f, 53.f, second);
+        float fade = 1.f - Smoothstep(48.f, 56.f, second);
         surf1 += (white - surf1) * .035f;
         surf2 += (surf1 - surf2) * .035f;
         shaped = Waypoint(0, SWELL_SAMPLES);
@@ -228,7 +228,7 @@ static void* GenerateOcean(void) {
         // The sub is what gives the reveal weight on a hall system, rather
         // than letting it arrive as nothing but more foam.
         tonal += Oscillator(3, pitch[6]) * .25f
-               * Smoothstep(29.f, 32.f, second) * (1.f - Smoothstep(40.f, 50.f, second));
+               * Smoothstep(29.f, 32.f, second) * (1.f - Smoothstep(43.f, 53.f, second));
         // One struck tone on the sample the word forms, decayed by a repeated
         // multiply: an exponential with a 0.65 s time constant and no expf.
         if (i == 30 * SAMPLE_RATE) accent = 1.f;

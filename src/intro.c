@@ -12,7 +12,7 @@
 // a further 3-second hold makes the ending read as deliberate rather than the
 // window just sitting there. Must be kept in step with those shader constants
 // by hand, same as the other timeline values duplicated across files.
-#define END_SECONDS 56.f
+#define END_SECONDS 59.f
 
 // The simulation runs at a fixed 1/60 s step so the run is reproducible on any
 // machine; see the integration loop in Run(). MAX_CATCHUP bounds how many steps

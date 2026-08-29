@@ -39,7 +39,7 @@ void main() {
     // oscillation fades in behind it, so the held word keeps turning gently
     // instead of stopping dead. Without it the last stretch of the run is a
     // still frame: both angles would be exactly zero and the distance is
-    // constant, so nothing but the background moves for five seconds.
+    // constant, so nothing but the background moves for the rest of the run.
     //
     // The residual has to swing around zero rather than be a fraction of the
     // free-swim term. Azimuth there is absolute - t * .13 - so leaving even 4%
@@ -49,7 +49,7 @@ void main() {
     // 1.53, a 43% sprite-size difference end to end and a visibly skewed logo.
     // At .045 radians the spread is about 1.30 to 1.42, which reads as the word
     // having some dimension. The periods, 25s and 37s, are long enough that the
-    // nine-second hold sees well under half a cycle - a drift, not a wobble.
+    // eight-second hold sees well under half a cycle - a drift, not a wobble.
     float rest = 1. - reveal;
     float azimuth = t * .13 * rest + sin(t * .25) * .045 * reveal;
     float elevation = sin(t * .07) * .5 * rest + sin(t * .17) * .03 * reveal;
@@ -126,7 +126,7 @@ void main() {
     // Fades in from black, then back to black a few seconds after NUTS is fully
     // formed, ending the intro on the held word rather than an abrupt cut. Must
     // match the copy in background.frag.glsl.
-    c *= min(smoothstep(0., 5., t), 1. - smoothstep(45., 53., t));
+    c *= min(smoothstep(0., 5., t), 1. - smoothstep(48., 56., t));
     // The per-particle distance fade, exp(-.55 * (view.z - .5)), folded in.
     c *= exp(.275 - .55 * view.z);
 }

@@ -3,12 +3,12 @@ uniform vec2 r;
 
 void main() {
     // Fades the whole scene in from black at the start and back out a few
-    // seconds after NUTS forms, rather than an abrupt cut. The 0..5 and 45..53
+    // seconds after NUTS forms, rather than an abrupt cut. The 0..5 and 48..56
     // second windows must match the copy in particles.vert.glsl. The fade-in is
     // short because the intro opens on its darkest frame: on a projector in a
     // blacked-out hall a slower one leaves the first seconds effectively empty,
     // which is a costly way to open a compo entry.
-    float fade = min(smoothstep(0., 5., t), 1. - smoothstep(45., 53., t));
+    float fade = min(smoothstep(0., 5., t), 1. - smoothstep(48., 56., t));
     vec2 p = gl_FragCoord.xy / r;
 
     // Waving water surface: warp x by a couple of slow, offset sine waves in y.
