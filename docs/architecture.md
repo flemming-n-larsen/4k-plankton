@@ -447,6 +447,32 @@ slightly larger. Measured over three seconds of the hold, the word's projected
 width changes by 14 pixels and its centroid by about 4, against 3 and under 1
 for a static camera.
 
+**The swarm pulses.** `particles.vert.glsl` multiplies each particle's colour
+by a flash keyed to its species: `.5 + .5 * sin(t * 1.2566 + type * 1.0472)`,
+cubed, so the six species light and go dark in turn a sixth of a cycle apart
+over a five-second period. This addresses the run's weakest stretch - the
+twenty-four seconds of free swim before the reveal, in which the camera orbits
+and the light slowly grows and nothing else happens.
+
+Keying it to the species rather than to the particle index is what makes it read
+as bioluminescence rather than as noise: the pairwise force sorts each species
+into its own spatially coherent cell, so whole regions of the swarm light in
+sequence and the light travels through the cluster as a wave. Keyed to the index
+it would only be a uniform per-particle flicker.
+
+The cubing matters as much as the phase. A plain sine was tried first and is
+invisible - it spends most of its time near the middle, and with the six phases
+evenly spread the frame's total light never changes, so the eye reads a slow
+reshuffle of which species is brightest rather than anything pulsing. Measured
+against the scene's own drift between seconds 15 and 18, the sine moved the
+red-tide species' emitted light by 1.7x where the cubed flash moves it by 4.5x.
+The mean of the cubed shape is exactly 5/16, so `.35 + 2.08 * pulse` averages to
+one and the flash costs no exposure; measured mean frame luminance falls 2.5 to
+3.5%, the bright peaks clipping in the dense cell cores. It is written as a
+deviation from one so the reveal can damp it to a quarter with a single
+multiply, since a strobing logo fights legibility and the speed accent below
+already owns that moment.
+
 **The reveal accents itself.** `particles.vert.glsl` scales each particle's
 brightness by its own speed, read from the velocity half of the buffer that the
 vertex shader otherwise never touches. For the six seconds of the migration every

@@ -114,6 +114,36 @@ void main() {
     c = mix(c, vec3(.02, .08, .15),
             clamp((view.z - 1.) / 2.5, 0., 1.) * (.75 - .25 * smoothstep(4., 40., t)));
 
+    // Bioluminescent pulse. The six species flash and go dark in turn, a sixth
+    // of a cycle apart, over a five-second period. This is keyed to the type
+    // rather than to the index on purpose: the pairwise force sorts each
+    // species into its own spatially coherent cell, so pulsing by type lights
+    // whole regions of the swarm in sequence and the light travels through the
+    // cluster as a wave, where pulsing by index would only produce a uniform
+    // per-particle flicker. It is what the free swim needs - twenty-four
+    // seconds in which the camera orbits and the light slowly grows, and
+    // nothing else happens.
+    //
+    // The sine is cubed into a flash rather than used as a swell. A plain sine
+    // was tried first and is invisible: it spends most of its time near the
+    // middle, and with the six phases evenly spread the frame's total light
+    // never changes, so the eye reads a slow reshuffle of which species is
+    // brightest rather than anything pulsing. Cubing puts each species dark for
+    // most of the cycle and very bright briefly, which is both what the
+    // creatures actually do and what can be seen.
+    //
+    // The mean of that cubed shape is exactly 5/16, so .35 + 2.08 * pulse
+    // averages to one: the flash costs no exposure and the frame's average
+    // brightness, tuned against a projector in a blacked-out hall, is
+    // unchanged. Written as a deviation from one so the reveal can damp it to a
+    // quarter with a single multiply - a strobing logo fights legibility, and
+    // the speed accent below already owns that moment.
+    //
+    // 1.2566 is 2*PI/5 for the period, 1.0472 is 2*PI/6 for the phase step.
+    float pulse = .5 + .5 * sin(t * 1.2566 + particle.w * 1.0472);
+    pulse *= pulse * pulse;
+    c *= 1. + (1. - .75 * reveal) * (2.08 * pulse - .65);
+
     // Brightness from speed, read straight out of the velocity half of the
     // buffer that nothing else in this shader touches. This is the reveal
     // accent, and it costs one buffer read rather than a scripted flash: for
