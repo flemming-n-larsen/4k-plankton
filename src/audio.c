@@ -32,7 +32,6 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // between waypoints, so the brightness of the ambience drifts over several
 // seconds instead of staying at one fixed mix.
 #define TEXTURE_SAMPLES (SAMPLE_RATE * 9)
-
 // ---------------------------------------------------------------------------
 // Tonal layer
 //
@@ -50,7 +49,7 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 // correcting it. The map is stable for k < 2, which every pitch here clears
 // by three orders of magnitude.
 #define TAU_PER_SAMPLE (6.2831853f / SAMPLE_RATE)
-#define VOICES 5    // three pad voices, then the sub and the accent
+#define VOICES 6    // three pad voices, then the sub, accent and bubbles
 
 // Key of D minor: it resolves brighter across the ascent and settles home
 // under the held word. The three pad voices sit in D3..D4, above the surf
@@ -80,7 +79,7 @@ static const unsigned char chord[5][3] = {
 };
 
 static float osc_y[VOICES];
-static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f };
+static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
 
 static float Oscillator(int voice, float frequency) {
     float k = frequency * TAU_PER_SAMPLE;
@@ -169,11 +168,13 @@ static float Waypoint(int slot, int period) {
 //
 // Over that noise bed sits a tonal layer: three sine voices moving through
 // five slow chord changes in D minor, a sub that arrives under the reveal and
-// a single struck tone on the sample the word forms. It carries no rhythm and
-// no melody by choice - the visuals are driven by sim_time and the audio by
-// the sound card, so anything rhythmic here could drift against the picture on
-// a machine that cannot hold 60 Hz. The pad rides the same macro envelope as
-// the water, so adding it does not flatten the run's dynamics.
+// a single struck tone on the sample the word forms. Bloops are sparse,
+// untimed cascades of short bubble grains in the open water, not a beat; their
+// density rises only with the two logo transitions. The visuals are driven by
+// sim_time and the audio by the sound card, so anything rhythmic here could
+// drift against the picture on a machine that cannot hold 60 Hz. The pad rides
+// the same macro envelope as the water, so adding it does not flatten the run's
+// dynamics.
 //
 // Over the run the ambience follows the picture: quiet and close while the
 // water is deep, opening out as the scene rises, surging as the particles let
@@ -187,6 +188,9 @@ static void* GenerateOcean(void) {
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, previous_white = 0.f;
     float accent = 0.f;
+    int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
+    int logo_chain_started = 0;
+    float bubble_frequency = 0.f;
     if (!block) return 0;
     for (i = 0; i < 11; i++) ((unsigned*)block)[i] = wav_header[i];
     pcm = (short*)((char*)block + 44);
@@ -195,7 +199,7 @@ static void* GenerateOcean(void) {
     for (i = 0; i < RUN_SAMPLES; i++) {
         float white = NextNoise();
         float white2 = NextNoise();
-        float shaped, texture, foam_raw, sample, tonal, wet;
+        float shaped, texture, foam_raw, sample, tonal, wet, bubble;
         int section, voice;
         // Seconds into the run, which is what the macro envelope is written
         // against. These four windows must stay in step with the shaders: 6..30
@@ -205,6 +209,18 @@ static void* GenerateOcean(void) {
         float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
         float surge = Smoothstep(28.f, 31.5f, second) * (1.f - Smoothstep(33.f, 42.f, second));
         float macro = arc + .6f * surge;
+        // A few bubbles belong in the water throughout the run. Pack them
+        // around the two visible transitions: formation at 30..36 and the
+        // logo's fade-out at 48..56. These are broad windows so the sound
+        // does not call attention to one arbitrary sample boundary.
+        float logo_burst = Smoothstep(29.f, 31.f, second) * (1.f - Smoothstep(35.f, 37.f, second))
+                         + Smoothstep(47.f, 49.f, second) * (1.f - Smoothstep(54.f, 56.f, second));
+        // Guarantee that the assembly has a live chain even if the previous
+        // random chain happened to finish just before the logo starts.
+        if (second >= 30.f && second < 31.f && !logo_chain_started) {
+            logo_chain_started = 1;
+            if (!bubble_age && !bubble_chain) bubble_counter = 0;
+        }
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
         float fade = 1.f - Smoothstep(48.f, 56.f, second);
@@ -238,6 +254,34 @@ static void* GenerateOcean(void) {
         tonal += Oscillator(4, pitch[7]) * accent * .18f;
         accent *= .99993f;
 
+        // Reference WAV analysis: sine sweeps rise from about 140..200 Hz
+        // toward 400..600 Hz over roughly 150 ms. A rounded attack and
+        // diminishing tail give each bubble its own short, upward bloop.
+        if (!bubble_age && bubble_chain && --bubble_delay <= 0) {
+            bubble_age = 1;
+            bubble_length = SAMPLE_RATE / (10 + 2 * (NextRandom() & 3));
+            bubble_frequency = 80.f + (NextNoise() * .5f + .5f) * 60.f;
+            osc_y[5] = 0.f; osc_z[5] = 1.f;
+            bubble_chain--;
+            bubble_delay = SAMPLE_RATE / (400 + (NextRandom() & 255));
+        } else if (!bubble_age && !bubble_chain && --bubble_counter <= 0) {
+            bubble_age = 1;
+            bubble_length = SAMPLE_RATE / (10 + 2 * (NextRandom() & 3));
+            bubble_frequency = 80.f + (NextNoise() * .5f + .5f) * 60.f;
+            osc_y[5] = 0.f; osc_z[5] = 1.f;
+            bubble_chain = 6 * (2 + (NextRandom() & 3) + (int)(logo_burst * 2.f)) - 1;
+            bubble_delay = SAMPLE_RATE / (400 + (NextRandom() & 255));
+            bubble_counter = (int)(SAMPLE_RATE * (1.2f + 2.2f * (NextNoise() * .5f + .5f)
+                - .8f * logo_burst));
+        }
+        bubble = 0.f;
+        if (bubble_age) {
+            float age = (float)bubble_age / bubble_length;
+            float envelope = 6.75f * age * (1.f - age) * (1.f - age);
+            bubble = Oscillator(5, bubble_frequency * (1.f + age + 2.f * age * age)) * envelope;
+            if (++bubble_age >= bubble_length) bubble_age = 0;
+        }
+
         // The foam gate has a floor under it. Squaring the swell alone put the
         // foam through a 94x range and silenced it outright for two seconds at
         // a time whenever the waypoint landed near zero, which is what made the
@@ -255,7 +299,7 @@ static void* GenerateOcean(void) {
         // ambience gets its own knee before the tonal layer is added, so the
         // sustained pad cannot dominate the knee and duck the water on every
         // swell; the sum is then rounded off by a second one.
-        wet = sample / (1.f + (sample < 0.f ? -sample : sample)) * .78f + tonal;
+        wet = sample / (1.f + (sample < 0.f ? -sample : sample)) * .78f + tonal + bubble * .08f;
         pcm[i] = (short)(int)(wet / (1.f + (wet < 0.f ? -wet : wet)) * fade * 30000.f);
     }
     return block;
