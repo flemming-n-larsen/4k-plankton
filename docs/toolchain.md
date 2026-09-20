@@ -11,7 +11,7 @@ The project starts from the newest stable versions available on 24 August 2026. 
 | Visual Studio Build Tools 2026 | 18.9.1 (build 12112.369) |
 | MSVC x64-host/x86-target | toolset 14.51.36231; compiler 19.51.36256.0 |
 | Windows 11 SDK | release 10.0.28000.2705; toolchain directory 10.0.28000.0 |
-| PowerShell | 7.6.5 |
+| PowerShell | 7.6.6 |
 | Crinkler | 3.0b |
 | Shader Minifier | 1.6.0 |
 
