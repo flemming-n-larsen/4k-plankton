@@ -8,7 +8,9 @@
 //   6      species count, must match the palette in particles.vert.glsl
 //   .11    interaction radius
 //   .6     repulsion fraction of that radius, so 1. - .6 is its complement
-//   30..36 the seconds over which the word forms, 44..51 the release
+//   34..36 the seconds over which the word actually snaps together, 44..51
+//          the release; 30 survives only as the outer bound shared with the
+//          camera's own copy of this ramp in particles.vert.glsl
 
 layout(local_size_x = 256) in;
 
@@ -135,16 +137,34 @@ void main() {
     // The formation timeline: the cluster is the main effect, and the particles
     // ease into the word NUTS over the 30..36 second window, hold it, and are
     // then let go again over 44..51, so the run ends on a release rather than
-    // on a dimmer switch. The 30..36 seconds must match the copy in
+    // on a dimmer switch. The outer 30..36 bound must match the copy in
     // particles.vert.glsl, which eases the camera to a full-frame front-on view
     // over the same window.
+    //
+    // The seek force itself only engages over 34..36, not the full 30..36:
+    // mix() blends it in from the first instant reveal is nonzero, so spreading
+    // that over six seconds would steer every particle toward its own fixed
+    // target well before anything looked arrived, reading as individual
+    // particles converging on a shape rather than the free-swim cells
+    // gathering and then resolving into it - the entry should look like the
+    // release run backwards, not its curve mirrored. Narrowing the window to
+    // its last two seconds costs nothing (34 is the same length as 30), and
+    // reveal is exactly 0 for the four seconds before it, rather than merely
+    // small. Reshaping the curve instead, e.g. pow(smoothstep(30.,36.,t), k),
+    // was tried and rejected: it costs a call plus an exponent constant and
+    // only approaches zero asymptotically, re-admitting a fainter version of
+    // the same early-steering problem across the whole window.
     //
     // The release is deliberately NOT copied into the camera. The camera's
     // free-swim azimuth is absolute - t * .13 - so letting its reveal fall back
     // to zero would swing the shot through six radians in seven seconds while
     // the word was coming apart. The camera holds its pulled-back front-on view
-    // and lets the subject dissolve in front of it.
-    float reveal = smoothstep(30., 36., t) * (1. - smoothstep(44., 51., t));
+    // and lets the subject dissolve in front of it. The narrower entry window
+    // above is likewise not copied into the camera: it keeps dollying back
+    // over the full 30..36 seconds so it is framed correctly by the time the
+    // word snaps together, rather than compressing the .5-to-1.42 retreat into
+    // the same two seconds as the letter snap.
+    float reveal = smoothstep(34., 36., t) * (1. - smoothstep(44., 51., t));
     if (reveal > .001) {
         // A full override at reveal 1, not a blend that leaves some pairwise
         // force active: 16384 particles compressed onto a thin curve sit far

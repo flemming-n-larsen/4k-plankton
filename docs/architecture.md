@@ -345,14 +345,16 @@ runs 25.7 at five seconds, 44.7 at twenty and 76.6 at forty.
 The free-swimming cluster is the main effect. Once, over the 30-to-36-second window,
 the cluster dissolves into the word NUTS
 and stays formed for the rest of the run: a finale, not a recurring
-event. The same `smoothstep(30., 36., t)` is duplicated in
+event. The outer bound, `smoothstep(30., 36., t)`, is duplicated in
 `particles.comp.glsl` (which moves the particles) and `particles.vert.glsl`
 (which eases the camera to a front-on view over the same seconds and pulls it
 back out of the swarm, from .5 to 1.42), with a comment on each marking
-them as needing to match. The camera has to leave the cluster for the word to be
-legible at all, so the reveal is a retreat from the plankton rather than a push
-in. Height is necessarily far less full than width, since the word's 4-letter
-aspect ratio is much wider than the 16:9 frame.
+them as needing to match - though as of the entry curve described below, the
+two copies share only that outer bound, not the same inner shape. The camera
+has to leave the cluster for the word to be legible at all, so the reveal is a
+retreat from the plankton rather than a push in. Height is necessarily far
+less full than width, since the word's 4-letter aspect ratio is much wider
+than the 16:9 frame.
 
 The pull-back distance is set by how close the word comes to the frame edge. Its
 widest point is the N's left vertical, at -1.30 in world units once the stroke
@@ -414,6 +416,40 @@ during the hold, that force fully replaces the Particle Life pairwise force
 rather than blending in a residual of it, since the extra density of points
 compressed onto a thin curve would otherwise amplify any residual into
 clumps.
+
+**The gather precedes the word.** The plain `smoothstep(30., 36., t)` used to read as
+individual particles converging on a shape rather than the free-swim cells gathering
+and then resolving into it: `mix(force, seek, reveal)` blends the seek term in from
+the first instant `reveal` is nonzero, so even a small fraction of it sustained across
+most of a six-second window is enough to steer every particle toward its own fixed
+target well before anything looks arrived. The fix moves only the seek force's own
+lower bound from 30 to 34, a same-length literal that costs nothing: for `t` under 34,
+`reveal` is exactly 0, bit-identical to ordinary free swim, and the same hermite ease
+used everywhere else in the file then carries it to full override over the last two
+seconds, landing at 36 exactly as before. `pow(smoothstep(30., 36., t), k)` was tried
+first and rejected - it costs a call plus an exponent constant, and even at a high `k`
+only approaches zero asymptotically rather than reaching it, so it re-admits a fainter
+version of the same early-steering bias across the whole window instead of removing
+it. This is the release's logic run in the opposite pacing, not its curve mirrored in
+time: the release eases across its entire window because the word must visibly
+dissolve throughout it, while the entry needs nothing to resolve until near the end,
+so only the last two seconds carry the ease.
+
+The camera is deliberately not recoupled to this narrower window. `particles.vert.glsl`
+keeps dollying back over the full 30-to-36 seconds, so it is already framed correctly
+by the moment the letters snap together rather than compressing the .5-to-1.42 retreat
+into the same two seconds as the snap, which would stack a whip-zoom on top of it. The
+cells are still worth watching while the camera recedes through seconds 30 to 34, so
+the wider camera window reads as continuity with the preceding free swim rather than
+an empty establishing shot.
+
+The velocity-driven brightness accent below is also left as it was, and will now show
+a sharper, more concentrated peak in the last two seconds instead of a gentler one
+spread over six - the same total convergence delivered in a third of the time. That
+reads as a flare-in answering the release's own flare-out rather than a flaw; if a
+measured frame ever shows it clipping, the fix is narrowing the entry window further
+(34 to 33 or lower), not touching the shared brightness formula, which has its own,
+separately tuned history.
 
 **The word is let go again.** The formation term is
 `smoothstep(30., 36., t) * (1. - smoothstep(44., 51., t))`, so after eight seconds
