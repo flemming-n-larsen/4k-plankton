@@ -1,6 +1,6 @@
 # Credits
 
-Plankton is by Mad Smi🤪ley / Nuts. These are the tools and ideas it is built on.
+Plankton is by Mad Smiley / Nuts. These are the tools and ideas it is built on.
 
 [Crinkler](https://github.com/runestubbe/Crinkler) is what makes the 4,096-byte
 limit reachable at all. It is a compressing linker by Rune L. H. Stubbe
