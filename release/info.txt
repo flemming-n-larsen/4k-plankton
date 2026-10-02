@@ -4,7 +4,6 @@ Plankton
 Title    : Plankton
 Author   : Mad Smiley / Nuts
 Category : PC 4K intro (TRSAC 4 KB compo)
-File     : plankton.exe (4,096 bytes or less, one file, no data files)
 Length   : 59 seconds; exits on its own
 
 Description
@@ -15,17 +14,31 @@ swarm gathers into the word NUTS, then dissolves back into living cells.
 Everything is generated at runtime: the simulation, the background, and the
 ocean ambience.
 
+Files
+-----
+Three executables, each under 4,096 bytes and each a complete entry. They
+show the same intro; they only differ in how the window size is chosen.
+
+plankton_1920x1080.exe   Window fixed at 1920x1080.
+plankton_1280x720.exe    Window fixed at 1280x720.
+plankton.exe             Window follows the current desktop resolution.
+
+The two fixed versions are the ones asked for by the rules. Set the desktop
+to the matching resolution first: they open a borderless window of exactly
+that size in the top-left corner and do not change the display mode.
+plankton.exe needs no setup at any resolution, so it is the safe fallback if
+the desktop resolution does not match.
+
 Requirements
 ------------
 - Windows, 32-bit executable (also runs on 64-bit Windows)
 - GPU and driver with OpenGL 4.3 or newer (compute shaders)
 - Sound output
-- Tested on NVIDIA hardware; works at 1920x1080 and 1280x720
+- Tested on NVIDIA hardware
 
 Running
 -------
-Start plankton.exe. It opens a borderless window on the primary monitor at
-the current desktop resolution. Press Escape to quit early.
+Start the exe. Press Escape to quit early.
 
 Notes
 -----

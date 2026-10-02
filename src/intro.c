@@ -262,10 +262,17 @@ static int Run(void) {
     else
 #endif
 #ifdef COMPO
-    // The client area of a WS_POPUP window is the whole window, so the screen
-    // metrics are also the framebuffer size - no GetClientRect needed.
+    // The client area of a WS_POPUP window is the whole window, so the window
+    // size is also the framebuffer size - no GetClientRect needed. The size is
+    // the desktop's, unless the build fixes it with COMPO_WIDTH/COMPO_HEIGHT
+    // (the per-resolution compo executables).
+#ifdef COMPO_WIDTH
+    window = CreateWindowExA(0, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
+                             width = COMPO_WIDTH, height = COMPO_HEIGHT, 0, 0, 0, 0);
+#else
     window = CreateWindowExA(0, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
                              width = GetSystemMetrics(SM_CXSCREEN), height = GetSystemMetrics(SM_CYSCREEN), 0, 0, 0, 0);
+#endif
 #else
     window = CreateWindowExA(0, "static", "in4k particles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, (GetSystemMetrics(SM_CXSCREEN) - 1280) / 2, (GetSystemMetrics(SM_CYSCREEN) - 720) / 2, 1280, 720, 0, 0, 0, 0);
 #endif

@@ -30,7 +30,7 @@ compatibility baseline:
 | Size limit | 4 KB, one `.exe` file |
 | Compo PC 1 | Ryzen 9950X3D, GeForce RTX 5070 Ti, 32 GB, Windows with latest NVIDIA drivers |
 | Compo PC 2 | i7-11700, GeForce RTX 3070, 32 GB, Windows with latest NVIDIA drivers |
-| Resolution | Must support both 1920x1080 and 1280x720 |
+| Resolution | Must supply at least a 1920x1080 and a 1280x720 version of the `.exe` |
 | Runtime | 5 minutes maximum |
 | Submission | Entry must include an information file |
 
@@ -41,13 +41,12 @@ compo machines must show the same thing, the simulation is advanced by measured
 wall-clock time rather than per frame, so it evolves at the same rate
 regardless of frame rate.
 
-The intro ships as **one executable that runs borderless fullscreen at the
-current desktop resolution**, rather than as separate per-resolution builds. It
-is resolution-independent, so the organizer sets the machine and the intro
-follows; 1920x1080 and 1280x720 have been confirmed to render identical
-framing and structure. This keeps the entry to the single exe file the rules
-describe, costs no bytes, and avoids the risk of a forced mode switch failing
-on the compo machine.
+The entry ships as **three executables**, because the rules ask for a 1920x1080 and a 1280x720 version of the exe:
+
+- `plankton.exe` runs borderless fullscreen at the **current desktop resolution**. It is resolution-independent, so the organizer sets the machine and the intro follows; 1920x1080 and 1280x720 have been confirmed to render identical framing and structure.
+- `plankton_1920x1080.exe` and `plankton_1280x720.exe` are the same program with the window size fixed at build time (`COMPO_WIDTH` and `COMPO_HEIGHT`). They open a borderless window of exactly that size in the top-left corner, so they fill the screen when the desktop is set to that resolution. A fixed size is a constant instead of two `GetSystemMetrics` calls, so each is about 24 bytes smaller.
+
+None of them switches the display mode, which avoids the risk of a forced mode switch failing on the compo machine. `build.ps1 -Release` builds all three and copies them to `release`.
 
 ## Graphics API decision
 

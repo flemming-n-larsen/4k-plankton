@@ -58,7 +58,7 @@ Build and run the Crinkler-compressed Compo version:
 
 The Compo build opens a borderless primary-monitor window and fails if the executable exceeds 4,096 bytes. Use `-Run` to launch it immediately. Build outputs, including the executable, Crinkler report, size report, and toolchain report, are written under `out\` and ignored by Git.
 
-To produce the executable that is committed and brought to the party, build with `-Release`. It runs the Compo build (same size check) and copies `plankton.exe` to `release\`, which is tracked by Git:
+To produce the executable that is committed and brought to the party, build with `-Release`. It runs the Compo build (same size check) three times and copies `plankton.exe` and the two fixed-resolution executables (`plankton_1920x1080.exe`, `plankton_1280x720.exe`) to `release\`, which is tracked by Git:
 
 ```powershell
 .\build.ps1 -Release
@@ -87,7 +87,7 @@ Add `-MinifyShaders` to the Debug build to compile the same minified shader text
 
 `-shot` is reproducible, which makes it the right option for comparing a change; `-live` exercises the real wall-clock timing path that `-shot` bypasses. `-width`/`-height` check the two resolutions TRSAC requires without changing display mode. `-steps<k>` runs k simulation steps per rendered frame, which reaches a late state quickly when tuning and produces byte-identical output to running k times as many frames. These options are compiled out of the Compo build.
 
-The Compo build runs borderless fullscreen at the current desktop resolution, and is resolution-independent, so one executable covers both resolutions TRSAC requires.
+The Compo build runs borderless fullscreen at the current desktop resolution, and is resolution-independent. TRSAC asks for a 1920x1080 and a 1280x720 version of the exe, so `-Release` also builds `plankton_1920x1080.exe` and `plankton_1280x720.exe`, which fix the window size at build time. A single one can be built with `.\build.ps1 -Resolution 1280x720`; it goes to `out\Compo-1280x720\`.
 
 ## Recording a video
 

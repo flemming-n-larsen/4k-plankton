@@ -6,9 +6,12 @@ param(
     # to the minifier flags can be compared frame-by-frame with the capture
     # options in src/intro.c rather than only by eye on the Compo build.
     [switch]$MinifyShaders,
+    [ValidateSet('', '1920x1080', '1280x720')][string]$Resolution = '',
     [switch]$Run,
     # Compo build only: also copies the verified executable to release/ so the
-    # shippable binary can be committed and carried to the party.
+    # shippable binary can be committed and carried to the party. Without
+    # -Resolution it builds all three entries: plankton.exe (desktop resolution)
+    # and the two fixed-resolution executables.
     [switch]$Release
 )
 
@@ -116,18 +119,20 @@ $($declarations -join [Environment]::NewLine)
     return $shaderDirectory
 }
 
-if ($Release) { $Configuration = 'Compo' }
+if ($Release -or $Resolution) { $Configuration = 'Compo' }
 $requireCrinkler = $VerifyTools -or $MinifyShaders -or $Configuration -eq 'Compo'; $toolchain = Get-Toolchain $requireCrinkler
 if ($VerifyTools) { $toolchain | ConvertTo-Json; if (!$PSBoundParameters.ContainsKey('Configuration')) { exit 0 } }
-$outputDirectory = Join-Path $repoRoot (Join-Path 'out' $Configuration); $objectDirectory = Join-Path $outputDirectory 'obj'
+$variant = if ($Resolution) { "Compo-$Resolution" } else { $Configuration }
+$exeName = if ($Resolution) { "plankton_$Resolution.exe" } else { 'plankton.exe' }
+$outputDirectory = Join-Path $repoRoot (Join-Path 'out' $variant); $objectDirectory = Join-Path $outputDirectory 'obj'
 New-Item -ItemType Directory -Force -Path $objectDirectory | Out-Null
 $generatedDirectory = Invoke-ShaderGeneration ($MinifyShaders -or $Configuration -eq 'Compo') $outputDirectory $toolchain
-$sourceFiles = @('intro.c', 'audio.c'); $executable = Join-Path $outputDirectory 'plankton.exe'
+$sourceFiles = @('intro.c', 'audio.c'); $executable = Join-Path $outputDirectory $exeName
 $objects = foreach ($sourceFile in $sourceFiles) {
     $source = Join-Path $repoRoot (Join-Path 'src' $sourceFile)
     $object = Join-Path $objectDirectory ($sourceFile -replace '\.c$', '.obj')
     $compileArguments = @('/nologo', '/c', '/TC', '/Zl', '/GS-', '/W4', "/I$generatedDirectory", "/Fo$object", $source)
-    if ($Configuration -eq 'Debug') { $compileArguments += @('/Od', '/Z7', '/DDEBUG') } else { $compileArguments += @('/O1', '/Os', '/DWIN32', '/DCOMPO') }
+    if ($Configuration -eq 'Debug') { $compileArguments += @('/Od', '/Z7', '/DDEBUG') } else { $compileArguments += @('/O1', '/Os', '/DWIN32', '/DCOMPO'); if ($Resolution) { $compileArguments += @("/DCOMPO_WIDTH=$($Resolution.Split('x')[0])", "/DCOMPO_HEIGHT=$($Resolution.Split('x')[1])") } }
     Invoke-Native 'cl.exe' $compileArguments
     $object
 }
@@ -138,7 +143,7 @@ if ($Configuration -eq 'Debug') {
     $report = Join-Path $outputDirectory 'crinkler-report.html'
     Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', '/TINYHEADER', '/TINYIMPORT', '/ORDERTRIES:10000', "/OUT:$executable", "/REPORT:$report") + $objects + $libraries)
     $bytes = (Get-Item -LiteralPath $executable).Length
-    [ordered]@{ executable = 'plankton.exe'; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
+    [ordered]@{ executable = $exeName; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
     Write-Host "Compo size: $bytes / 4096 bytes"; if ($bytes -gt 4096) { Fail "Compo executable exceeds the 4096-byte limit by $($bytes - 4096) bytes." }
 }
 Write-ToolchainReport $toolchain $outputDirectory; Write-Host "Built $executable"
@@ -146,6 +151,7 @@ if ($Release) {
     $releaseDirectory = Join-Path $repoRoot 'release'
     New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
     Copy-Item -LiteralPath $executable -Destination $releaseDirectory -Force
-    Write-Host "Released $(Join-Path $releaseDirectory 'plankton.exe')"
+    Write-Host "Released $(Join-Path $releaseDirectory $exeName)"
+    if (!$Resolution) { foreach ($size in '1920x1080', '1280x720') { & $PSCommandPath -Release -Resolution $size } }
 }
 if ($Run) { Start-Process -FilePath $executable }
