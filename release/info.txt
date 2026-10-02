@@ -1,0 +1,36 @@
+Plankton
+========
+
+Title    : Plankton
+Author   : Mad Smiley / Nuts
+Category : PC 4K intro (TRSAC 4 KB compo)
+File     : plankton.exe (4,096 bytes or less, one file, no data files)
+Length   : 59 seconds; exits on its own
+
+Description
+-----------
+A 3D Particle Life simulation: 16,384 plankton of 6 species swim through an
+underwater ascent, from the dark deep up toward the light. Near the end the
+swarm gathers into the word NUTS, then dissolves back into living cells.
+Everything is generated at runtime: the simulation, the background, and the
+ocean ambience.
+
+Requirements
+------------
+- Windows, 32-bit executable (also runs on 64-bit Windows)
+- GPU and driver with OpenGL 4.3 or newer (compute shaders)
+- Sound output
+- Tested on NVIDIA hardware; works at 1920x1080 and 1280x720
+
+Running
+-------
+Start plankton.exe. It opens a borderless window on the primary monitor at
+the current desktop resolution. Press Escape to quit early.
+
+Notes
+-----
+- The window has no close button handling; use Escape.
+- Source, build scripts and credits: see the project repository
+  (README.md and CREDITS.md).
+- Packed with Crinkler (Rune L. H. Stubbe and Aske Simon Christensen),
+  GLSL minified with Shader Minifier (Laurent Le Brun).

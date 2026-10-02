@@ -40,7 +40,7 @@ Build and run the windowed Debug version:
 
 ```powershell
 .\build.ps1 -Configuration Debug
-.\out\Debug\in4k-particles.exe
+.\out\Debug\plankton.exe
 ```
 
 Or build and launch it directly:
@@ -53,10 +53,18 @@ Build and run the Crinkler-compressed Compo version:
 
 ```powershell
 .\build.ps1 -Configuration Compo
-.\out\Compo\in4k-particles.exe
+.\out\Compo\plankton.exe
 ```
 
 The Compo build opens a borderless primary-monitor window and fails if the executable exceeds 4,096 bytes. Use `-Run` to launch it immediately. Build outputs, including the executable, Crinkler report, size report, and toolchain report, are written under `out\` and ignored by Git.
+
+To produce the executable that is committed and brought to the party, build with `-Release`. It runs the Compo build (same size check) and copies `plankton.exe` to `release\`, which is tracked by Git:
+
+```powershell
+.\build.ps1 -Release
+```
+
+`release\info.txt` is the information file the compo requires with the entry. It is maintained by hand, so update it if the run length, requirements, or credits change.
 
 Press Escape to exit either build. The intro uses the predefined `"static"` window class and runs no message pump in the Compo build, so the window's close button does nothing - Escape, or letting the run finish, is how it ends.
 
@@ -65,10 +73,10 @@ Press Escape to exit either build. The intro uses the predefined `"static"` wind
 The Debug build writes shader and OpenGL diagnostics to `in4k.log` as well as to the debugger, and accepts options that capture a frame to `shot.bmp` directly from the back buffer:
 
 ```powershell
-.\out\Debug\in4k-particles.exe -shot900                       # fixed 60 Hz step, capture at frame 900
-.\out\Debug\in4k-particles.exe -live20                        # real timing, capture after 20 seconds
-.\out\Debug\in4k-particles.exe -shot900 -width1280 -height720 # exact client size
-.\out\Debug\in4k-particles.exe -shot900 -steps20              # 5 simulated minutes in ~15s
+.\out\Debug\plankton.exe -shot900                       # fixed 60 Hz step, capture at frame 900
+.\out\Debug\plankton.exe -live20                        # real timing, capture after 20 seconds
+.\out\Debug\plankton.exe -shot900 -width1280 -height720 # exact client size
+.\out\Debug\plankton.exe -shot900 -steps20              # 5 simulated minutes in ~15s
 ```
 
 Add `-MinifyShaders` to the Debug build to compile the same minified shader text the Compo build uses, so a shader change can be compared frame-by-frame rather than only by eye on the Compo build:
@@ -86,7 +94,7 @@ The Compo build runs borderless fullscreen at the current desktop resolution, an
 `-record<fps>` captures the entire run frame-by-frame straight from the back buffer to `frames/frameNNNNN.bmp`, then exits once the run ends. This is more reliable than screen/window capture, which can record the wrong window against this exclusive fullscreen surface.
 
 ```powershell
-.\out\Debug\in4k-particles.exe -record30 -width960 -height540
+.\out\Debug\plankton.exe -record30 -width960 -height540
 ```
 
 Requires [ffmpeg](https://ffmpeg.org/) (`scoop install ffmpeg`). Stitch the frames and the freshly generated `ocean.wav` (written alongside `frames/` by the same Debug run) into one MP4:
