@@ -46,7 +46,7 @@ The entry ships as **three executables**, because the rules ask for a 1920x1080 
 - `plankton.exe` runs borderless fullscreen at the **current desktop resolution**. It is resolution-independent, so the organizer sets the machine and the intro follows; 1920x1080 and 1280x720 have been confirmed to render identical framing and structure.
 - `plankton_1920x1080.exe` and `plankton_1280x720.exe` are the same program with the window size fixed at build time (`COMPO_WIDTH` and `COMPO_HEIGHT`). They open a borderless window of exactly that size in the top-left corner, so they fill the screen when the desktop is set to that resolution. A fixed size is a constant instead of two `GetSystemMetrics` calls, so each is about 24 bytes smaller.
 
-None of them switches the display mode, which avoids the risk of a forced mode switch failing on the compo machine. `build.ps1 -Release` builds all three and copies them to `release`.
+None of them switches the display mode, which avoids the risk of a forced mode switch failing on the compo machine. `build.ps1 -Release` builds all three and copies them to `release\`.
 
 ## Graphics API decision
 
