@@ -22,5 +22,5 @@ void main() {
     float halo = falloff * falloff;
     float core = halo * halo;
     core *= core;
-    colour = vec4(c * (halo * .04 + core * .5), 1.);
+    colour = vec4(c * (halo * .04 + core * .44), 1.);
 }

@@ -49,7 +49,7 @@ void main() {
     float angle = atan(sun.x, sun.y);
     float rays = pow(abs(sin(angle * 9. + sin(t * .3) * .4)), 6.)
                * (.55 + .45 * sin(angle * 3.7 - t * .13));
-    colour += rays * vec3(.9, 1., .85) * .9 * lit / (1. + dot(sun, sun) * .6);
+    colour += rays * vec3(.9, 1., .85) * .55 * lit / (1. + dot(sun, sun) * .6);
 
     // Rising bubbles: three parallax layers of a hashed cell grid, each
     // scrolling upward. This is what sells the ascent - the light alone says
@@ -82,9 +82,9 @@ void main() {
         // placement from the size, so the layers do not show their lattice.
         float d = length(centre);
         bubbles += (smoothstep(radius, radius * .8, d) - smoothstep(radius * .76, radius * .5, d))
-                 * max(h - .78, 0.) * 5.;
+                 * max(h - .84, 0.) * 6.;
     }
-    colour += bubbles * vec3(.5, .8, .9) * .26 * (.3 + .7 * rise);
+    colour += bubbles * vec3(.5, .8, .9) * .15 * (.3 + .7 * rise);
 
     gl_FragColor = vec4(colour * (1. - .35 * length(p - .5)) * fade, 1.);
 }

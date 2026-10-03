@@ -142,7 +142,7 @@ void main() {
     // 1.2566 is 2*PI/5 for the period, 1.0472 is 2*PI/6 for the phase step.
     float pulse = .5 + .5 * sin(t * 1.2566 + particle.w * 1.0472);
     pulse *= pulse * pulse;
-    c *= 1. + (1. - .75 * reveal) * (2.08 * pulse - .65);
+    c *= 1. + (1. - .75 * reveal) * (1.6 * pulse - .5);
 
     // Brightness from speed, read straight out of the velocity half of the
     // buffer that nothing else in this shader touches. This is the reveal
