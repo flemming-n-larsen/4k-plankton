@@ -144,6 +144,17 @@ void main() {
     pulse *= pulse * pulse;
     c *= 1. + (1. - .75 * reveal) * (1.6 * pulse - .5);
 
+    // The wave. Between 17 and about 21 seconds a shell of light leaves the
+    // camera and sweeps outward through the swarm, which is the one event in
+    // the free-swim stretch. It is centred on the camera, not the swarm: a
+    // shell around the swarm centre only lights the few colonies that happen to
+    // lie on the camera's slice of it, while one around the camera crosses
+    // every direction at once and reads as a front rolling over the whole
+    // frame. There is no gate: the shell's radius is negative before 17 and
+    // past the swarm after about 21, so the term is zero outside that window.
+    float shell = length(offset) - (t - 17.) * .5;
+    c *= 1. + 6. * exp(-30. * shell * shell);
+
     // Brightness from speed, read straight out of the velocity half of the
     // buffer that nothing else in this shader touches. This is the reveal
     // accent, and it costs one buffer read rather than a scripted flash: for

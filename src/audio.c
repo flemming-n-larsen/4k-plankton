@@ -72,7 +72,7 @@ static const float pitch[8] = {
 // as a chord change rather than as a jump.
 static const unsigned char chord[5][3] = {
     { 1, 2, 3 },    // from  6s   Dm
-    { 2, 3, 5 },    // from 16s   Dm/F
+    { 2, 3, 5 },    // from 18s   Dm/F
     { 1, 2, 4 },    // from 24s   Bb
     { 0, 2, 3 },    // from 30s   F
     { 1, 2, 3 }     // from 38s   Dm
@@ -207,7 +207,10 @@ static void* GenerateOcean(void) {
         // the master fade.
         float second = (float)i * (1.f / SAMPLE_RATE);
         float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
-        float surge = Smoothstep(31.f, 35.f, second) * (1.f - Smoothstep(37.f, 45.f, second));
+        // The small swell under the wave of light at 17..21, so the free-swim
+        // stretch has an event the sound answers as well as the picture.
+        float surge = Smoothstep(31.f, 35.f, second) * (1.f - Smoothstep(37.f, 45.f, second))
+                    + .5f * Smoothstep(17.f, 19.f, second) * (1.f - Smoothstep(19.5f, 22.5f, second));
         float macro = arc + .6f * surge;
         // A few bubbles belong in the water throughout the run. Pack them
         // around the two visible transitions: formation at 30..36 and the
@@ -236,7 +239,7 @@ static void* GenerateOcean(void) {
         foam3 += (foam2 - foam3) * .14f;
 
         // The chord section, on the same clock as the macro envelope above.
-        section = second < 16.f ? 0 : second < 24.f ? 1
+        section = second < 18.f ? 0 : second < 24.f ? 1
                 : second < 30.f ? 2 : second < 38.f ? 3 : 4;
         tonal = 0.f;
         for (voice = 0; voice < 3; voice++)
