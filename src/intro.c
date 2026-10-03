@@ -244,6 +244,10 @@ static int Run(void) {
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
     int forced_width = Option("-width", 0), forced_height = Option("-height", 0);
     int steps = Option("-steps", 1);
+    // "-lag<ms>" delays the picture's clock by that many milliseconds after the
+    // sound has been started, so a sound that is heard late can be lined up by
+    // ear before the value is baked into the Compo build.
+    int lag_ms = Option("-lag", 0);
     // "-record<fps>" (e.g. "-record30") captures every frame of a full,
     // deterministic run to frames/frameNNNNN.bmp at that frame rate, for
     // stitching into a video externally - see docs/toolchain.md.
@@ -336,12 +340,19 @@ static int Run(void) {
     // billions on a long-running machine, where float32 can no longer resolve a
     // single frame.
     start_ticks = GetTickCount(); sim_steps = 0; sim_time = 0.f;
+#ifdef DEBUG
+    start_ticks += lag_ms;
+#endif
     for (;;) {
 #ifdef DEBUG
         while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) DispatchMessageA(&message);
 #endif
         if (GetAsyncKeyState(VK_ESCAPE)) break;
+#ifdef DEBUG
+        now = (float)(int)(GetTickCount() - start_ticks) * .001f;
+#else
         now = (float)(GetTickCount() - start_ticks) * .001f;
+#endif
 #ifndef DEBUG
         if (sim_time >= END_SECONDS) break;
 #endif

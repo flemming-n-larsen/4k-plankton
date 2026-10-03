@@ -682,6 +682,11 @@ grab, by reading the back buffer in-process and writing `shot.bmp`:
   many seconds;
 - `-width<w> -height<h>` sizes the client area exactly, so the two required
   compo resolutions can be compared without changing display mode;
+- `-lag<ms>` delays the picture's clock by that many milliseconds after the sound has been
+  started. Playback through `PlaySoundA` begins some time after the call returns, so the
+  sound can be heard late against the picture (the letter tones of NUTS were reported this
+  way); run the Debug build live with a few values, for example `-lag150`, to find how much
+  delay lines them up by ear. Compiled out of Compo, so it costs no bytes there.
 - `-steps<k>` runs k simulation steps per rendered frame. Rendering never feeds
   back into the simulation, so this reaches a late state in a fraction of the
   wall-clock time while producing byte-identical output, since the simulation
