@@ -152,7 +152,7 @@ void main() {
     // settles into the letters - an event that arrives and resolves on its own,
     // exactly on the timeline, with no constant to keep in step. While the
     // cluster is just drifting it reads as a faint twinkle on the fastest cells.
-    c *= 1. + 1.5 * length(v[gl_VertexID * 2 + 1].xyz);
+    c *= 1. + .5 * length(v[gl_VertexID * 2 + 1].xyz);
     // Fades in from black, then back to black a few seconds after NUTS is fully
     // formed, ending the intro on the held word rather than an abrupt cut. Must
     // match the copy in background.frag.glsl.

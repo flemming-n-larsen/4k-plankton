@@ -185,7 +185,7 @@ void main() {
         // while it breaks up, so the release answers the surge at thirty seconds
         // without a scripted flash, and the master fade at 48..56 carries away
         // what is left.
-        force = mix(force, (LetterTarget(float(i)) - self.xyz) * 9., reveal);
+        force = mix(force, (LetterTarget(float(i)) - self.xyz) * 60., reveal);
     }
 
     vec3 velocity = v[b + 1].xyz + force * d;

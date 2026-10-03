@@ -177,8 +177,8 @@ static float Waypoint(int slot, int period) {
 // dynamics.
 //
 // Over the run the ambience follows the picture: quiet and close while the
-// water is deep, opening out as the scene rises, surging as the particles let
-// go at 30 seconds and settling again over the held word, then fading with the
+// water is deep, opening out as the scene rises, surging as the word snaps
+// together at 35 seconds and settling again over the held word, then fading with the
 // image. Nothing here is a sample or a sequence - the swells are still the
 // random waypoints, with a scripted macro envelope over the top. Because the
 // buffer is one shot rather than a loop, it needs no crossfade at all.
@@ -202,12 +202,12 @@ static void* GenerateOcean(void) {
         float shaped, texture, foam_raw, sample, tonal, wet, bubble;
         int section, voice;
         // Seconds into the run, which is what the macro envelope is written
-        // against. These four windows must stay in step with the shaders: 6..30
-        // is the ascent, 30 is when the particles let go, and 48..56 is the
-        // master fade.
+        // against. These windows must stay in step with the shaders: 6..30
+        // is the ascent, 34..36 is when the word snaps together, and 48..56 is
+        // the master fade.
         float second = (float)i * (1.f / SAMPLE_RATE);
         float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
-        float surge = Smoothstep(28.f, 31.5f, second) * (1.f - Smoothstep(33.f, 42.f, second));
+        float surge = Smoothstep(31.f, 35.f, second) * (1.f - Smoothstep(37.f, 45.f, second));
         float macro = arc + .6f * surge;
         // A few bubbles belong in the water throughout the run. Pack them
         // around the two visible transitions: formation at 30..36 and the
@@ -248,10 +248,10 @@ static void* GenerateOcean(void) {
         // The sub is what gives the reveal weight on a hall system, rather
         // than letting it arrive as nothing but more foam.
         tonal += Oscillator(3, pitch[6]) * .25f
-               * Smoothstep(29.f, 32.f, second) * (1.f - Smoothstep(43.f, 53.f, second));
+               * Smoothstep(32.f, 35.f, second) * (1.f - Smoothstep(43.f, 53.f, second));
         // One struck tone on the sample the word forms, decayed by a repeated
         // multiply: an exponential with a 0.65 s time constant and no expf.
-        if (i == 30 * SAMPLE_RATE) accent = 1.f;
+        if (i == 35 * SAMPLE_RATE + SAMPLE_RATE / 2) accent = 1.f;
         tonal += Oscillator(4, pitch[7]) * accent * .18f;
         accent *= .99993f;
 
