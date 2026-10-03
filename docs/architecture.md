@@ -70,9 +70,13 @@ undefined unless `GL_POINT_SPRITE` is enabled. Without it the value reads as
 zero, every fragment fails the sprite falloff test, and the screen stays black
 with no GL error reported.
 
-WebGPU and WebGL were considered and do not apply - both are browser APIs, and
-this is a native Win32 executable. For a browser entry WebGPU would be the
-right choice for the same reason compute shaders are here.
+For the native Win32 executable, browser APIs do not apply. The separate
+[browser showcase](../web/) uses WebGPU for its compute pass and WGSL shaders;
+it is a presentation port and is not included in the competition executable.
+WebGPU does not expose variable-size OpenGL point sprites, so its renderer
+expands each particle into a small quad. The browser version keeps the same
+simulation timeline and procedural scene, with output that is close rather
+than pixel-identical to the native build.
 
 ## Toolchain decision
 

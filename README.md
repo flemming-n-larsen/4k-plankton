@@ -26,6 +26,10 @@ The audio is hand-written DSP throughout - noise, filters, and a handful of osci
 
 The broader architecture, the build variants, and the decisions behind them are documented in [docs/architecture.md](docs/architecture.md). The concrete command-line stack and its responsibilities are documented in [docs/toolchain.md](docs/toolchain.md).
 
+## Browser showcase
+
+A separate browser-oriented port lives in [web/](web/). It uses WebGPU and Web Audio and is intended as a shareable showcase; it is not part of the 4 KiB Windows executable. See [web/README.md](web/README.md) for local run instructions.
+
 ## Build and run
 
 Open PowerShell 7 in the repository root. The build script initializes the MSVC environment itself, so a Visual Studio developer prompt is not required.

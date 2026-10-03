@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#03111b">
+    <meta name="description" content="Plankton: a procedural particle-life intro running in your browser.">
+    <title>Plankton — a browser intro</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <canvas id="scene" aria-label="Procedural underwater particle intro"></canvas>
+    <main class="shell">
+      <section class="intro-card" id="intro-card" aria-labelledby="title">
+        <p class="eyebrow">A procedural particle-life intro</p>
+        <h1 id="title">Plankton<span>.</span></h1>
+        <p class="summary">A small universe wakes beneath the surface, gathers into a word, then drifts back into the deep.</p>
+        <div class="start-row">
+          <button class="primary-button" id="start-button" disabled>Preparing the GPU…</button>
+          <label class="quality-control" for="quality">
+            <span>Particle detail</span>
+            <select id="quality" aria-label="Particle detail">
+              <option value="4096" selected>Balanced · 4,096</option>
+              <option value="8192">Full · 8,192</option>
+              <option value="16384">Maximum · 16,384</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint" id="status" role="status">Requesting a WebGPU adapter…</p>
+        <p class="fine-print">WebGPU is required. Sound starts after you press play.</p>
+      </section>
+
+      <section class="error-card" id="error-card" hidden aria-live="polite">
+        <p class="eyebrow">This browser cannot start the intro</p>
+        <h2>WebGPU is unavailable</h2>
+        <p id="error-message">Use a browser and graphics driver with WebGPU enabled.</p>
+        <p class="fine-print">The native Windows version remains in the repository root.</p>
+      </section>
+
+      <div class="play-controls" id="play-controls" hidden>
+        <div class="wordmark">PLANKTON <span>·</span> 4K</div>
+        <div class="control-buttons">
+          <button class="icon-button" id="sound-button" aria-pressed="true" title="Mute sound (M)">Sound on</button>
+          <button class="icon-button" id="pause-button" aria-pressed="false" title="Pause (Space)">Pause</button>
+          <button class="icon-button" id="fullscreen-button" title="Fullscreen (F)">Fullscreen</button>
+        </div>
+        <div class="timeline" aria-label="Intro progress"><div id="progress"></div></div>
+      </div>
+
+      <section class="end-card" id="end-card" hidden>
+        <p class="eyebrow">The water settles</p>
+        <h2>Until next time<span>.</span></h2>
+        <button class="primary-button" id="replay-button">Play again</button>
+      </section>
+    </main>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
