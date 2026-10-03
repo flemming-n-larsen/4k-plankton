@@ -164,7 +164,11 @@ void main() {
     // over the full 30..36 seconds so it is framed correctly by the time the
     // word snaps together, rather than compressing the .5-to-1.42 retreat into
     // the same two seconds as the letter snap.
-    float reveal = smoothstep(34., 36., t) * (1. - smoothstep(44., 51., t));
+    // The word assembles letter by letter, left to right: each particle's ramp
+    // is delayed by its own target's x, so N locks first and S about 1.75 seconds
+    // later. The release stays global.
+    vec3 target = LetterTarget(float(i));
+    float reveal = smoothstep(33., 35., t - (target.x + 1.3) * .7) * (1. - smoothstep(44., 51., t));
     if (reveal > .001) {
         // A full override at reveal 1, not a blend that leaves some pairwise
         // force active: 16384 particles compressed onto a thin curve sit far
@@ -185,7 +189,7 @@ void main() {
         // while it breaks up, so the release answers the surge at thirty seconds
         // without a scripted flash, and the master fade at 48..56 carries away
         // what is left.
-        force = mix(force, (LetterTarget(float(i)) - self.xyz) * 60., reveal);
+        force = mix(force, (target - self.xyz) * 60., reveal);
     }
 
     vec3 velocity = v[b + 1].xyz + force * d;

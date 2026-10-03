@@ -140,7 +140,7 @@ The tonal layer sits on top of that bed:
 - Sine voices come from a magic-circle oscillator, `y += k * z; z -= k * y` with `k = 2*PI*f / SAMPLE_RATE`. It is a symplectic rotation, so its amplitude neither decays nor grows across the whole run - there is no lookup table to store, nothing to renormalise, and no `sinf`, which `/NODEFAULTLIB` has no library for. Its output starts at zero, so a voice entering mid-run enters silently, and `k` can be changed at any sample without disturbing the phase, which is what makes the chord changes click-free. The small-angle `k` puts the true frequency out by `k*k/24`, which is 0.002% at the pad pitches and 0.12% at the accent.
 - Three sustained voices play a five-chord progression in D minor - Dm, Dm/F, B-flat, F, Dm - changing at seconds 6, 18, 24, 30 and 38, so the harmony resolves brighter across the ascent and settles home under the held word. The voices sit in D3 to D4, above the surf body and below the foam band, so the chord occupies a gap in the ambience's spectrum rather than fighting it. No voice moves by more than a whole step at any change, which keeps an instantaneous pitch step reading as a chord change rather than a jump. Six distinct pitches serve fifteen chord slots, so the chords are stored as byte indices into a pitch table rather than as a flat grid of floats.
 - The pad is multiplied by the same macro envelope as the water, so it swells with the ascent and lifts at the reveal instead of sitting at one level and flattening the run's dynamics.
-- A sub at D2 enters between seconds 32 and 35 and leaves over seconds 43 to 53, so the reveal arrives with weight on a hall system rather than as nothing but more foam. A single tone at D5 is struck on the sample the word forms and decayed by a repeated multiply - an exponential with a 0.65 second time constant and no `expf`.
+- A sub at D2 enters between seconds 32 and 35 and leaves over seconds 43 to 53, so the reveal arrives with weight on a hall system rather than as nothing but more foam. Four tones - D5, F5, A5 and D6, an arpeggio of the key - are struck as the four letters lock, from 35.2 seconds every .55 seconds, and each is decayed by a repeated multiply - an exponential with a 0.65 second time constant and no `expf`.
 - Bubble cascades use deeper sine sweeps starting at 80..140 Hz and rising to four times that frequency over 62..100 ms, with a rounded attack and diminishing tail. This follows frequency analysis of the user's `sine-bubbles-underwater-fx.wav` reference, adapted to the requested slower, deeper sound; the reference is not embedded. Gaps inside a cascade are about 1.5..2.5 ms, giving the stream a little more separation, and each cascade contains six times the previous number of bubbles. The gap before the next separate cascade varies randomly over roughly 1.2..3.4 seconds in open water, and a chain is guaranteed during the 30..36 second NUTS assembly. Cascades also become more frequent around the 48..56 second fade-out. These cues use the audio clock and can drift from the visuals on machines that cannot maintain the simulation rate.
 - The ambience passes through its own soft-knee saturation *before* the tonal layer is added, and the sum through a second one. Folding a sustained low pad into a single knee would let it dominate the knee and duck the water on every swell.
 
@@ -466,8 +466,27 @@ when the release begins, so the logo had almost no time to be looked at. At
 and the word is sharp from about 37 seconds with about seven seconds of hold.
 The change is one literal. The speed-driven brightness accent below scales
 with the stiffer spring, so its coefficient dropped from 1.5 to .5 to keep the
-arrival from burning out into white blobs. The audio accent, sub and surge
-moved to the snap, at about 35.5 seconds.
+arrival from burning out into white blobs. The audio sub and surge moved to the snap.
+
+**The word assembles letter by letter.** The seek ramp is per particle:
+`smoothstep(33., 35., t - (target.x + 1.3) * .7)`, so a particle's ramp is delayed by
+where in the word it is going. N locks first, at about 35.3 seconds, then U, T and S at
+about 35.8, 36.2 and 36.9, which turns one snap into four beats and lets the audio hit
+each letter (the four tones above, at 35.2, 35.75, 36.3 and 36.85 seconds). The release
+stays global. The camera's own 30..36 second window is unchanged. While the left of the
+word is forming, the cells on the right are still free-swimming, which reads as the
+creatures being drawn into the word rather than as a shape fading in. `LetterTarget` is now evaluated once per particle outside the branch.
+The dive, the letter-by-letter assembly, the ring and the four tones together cost 75
+bytes (3964 to 4039); merging the two near-identical bubble-start branches in `audio.c`,
+with the random draws in their old order so the sound is bit-identical, gave 50 back (3989).
+
+**A ring crosses the held word.** The wave's shell expression appears a second time at
+37 seconds, `length(offset) - 1.36 - (t - 37.) * .6`. The word is 1.42 from the camera at
+its middle and up to 1.9 at its edges, so a camera-centred shell widening from 1.36 sweeps
+across it from the middle outward, a flash at the moment the last letter is down. At an
+amplitude of 4 it burnt the letters out to white (10.5% of pixels at 250 or more, against
+about 4.4% in the hold); at .7 it is 6.6% and 3.2% white, which reads as a flash rather
+than a loss of the letterforms.
 
 **The word is let go again.** The formation term is
 `smoothstep(30., 36., t) * (1. - smoothstep(44., 51., t))`, so after eight seconds
@@ -535,6 +554,14 @@ falls 2.5 to 3.5%, the bright peaks clipping in the dense cell cores. Writing it
 as a deviation from one lets the reveal damp it to a quarter with a single
 multiply, since a strobing logo hurts legibility and the speed accent below
 already owns that moment.
+
+**The opening is a dive.** The camera starts 1.8 units further out and swims in to the
+swarm over the first ten seconds (`1.8 * (1. - smoothstep(0., 10., t))` added to its
+distance), so the run opens on the whole creature cloud hanging in the dark and ends
+the dive among the colonies. At the original 1 unit the swarm still fills the frame,
+since its projected radius at 1.5 is 1.27 of the half-height, and the dive only read as
+the colonies growing. From about 2.3 it sits inside the frame as a ball of light, which
+is what makes the dive read.
 
 **A wave of light crosses the free swim.** Eight, sixteen and twenty-four seconds
 looked alike in review, so between 17 and about 21 seconds a shell of light

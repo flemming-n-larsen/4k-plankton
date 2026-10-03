@@ -78,6 +78,10 @@ static const unsigned char chord[5][3] = {
     { 1, 2, 3 }     // from 38s   Dm
 };
 
+// Ratios above D5 for the four letters of the word, as each one locks: D, F,
+// A, then D an octave up, an arpeggio of the key.
+static const float letter_ratio[4] = { 1.f, 1.1892f, 1.4983f, 2.f };
+
 static float osc_y[VOICES];
 static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
 
@@ -187,7 +191,7 @@ static void* GenerateOcean(void) {
     void* block = VirtualAlloc(0, 44 + RUN_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, foam3 = 0.f, previous_white = 0.f;
-    float accent = 0.f;
+    float accent = 0.f, accent_ratio = 1.f;
     int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
     int logo_chain_started = 0;
     float bubble_frequency = 0.f;
@@ -252,30 +256,37 @@ static void* GenerateOcean(void) {
         // than letting it arrive as nothing but more foam.
         tonal += Oscillator(3, pitch[6]) * .25f
                * Smoothstep(32.f, 35.f, second) * (1.f - Smoothstep(43.f, 53.f, second));
-        // One struck tone on the sample the word forms, decayed by a repeated
-        // multiply: an exponential with a 0.65 s time constant and no expf.
-        if (i == 35 * SAMPLE_RATE + SAMPLE_RATE / 2) accent = 1.f;
-        tonal += Oscillator(4, pitch[7]) * accent * .18f;
+        // A struck tone for each letter as it locks, from 35.2 s every .55 s to
+        // follow the left-to-right assembly in particles.comp.glsl, decayed by a
+        // repeated multiply: an exponential with a 0.65 s time constant and no
+        // expf.
+        {
+            int hit = i - (35 * SAMPLE_RATE + SAMPLE_RATE / 5), gap = SAMPLE_RATE * 55 / 100;
+            if (hit >= 0 && hit % gap == 0 && hit / gap < 4) {
+                accent = 1.f;
+                accent_ratio = letter_ratio[hit / gap];
+            }
+        }
+        tonal += Oscillator(4, pitch[7] * accent_ratio) * accent * .18f;
         accent *= .99993f;
 
         // Reference WAV analysis: sine sweeps rise from about 140..200 Hz
         // toward 400..600 Hz over roughly 150 ms. A rounded attack and
         // diminishing tail give each bubble its own short, upward bloop.
-        if (!bubble_age && bubble_chain && --bubble_delay <= 0) {
+        // A bubble starts either inside a chain, when its delay runs out, or as
+        // the first of a new chain when the gap counter does. The two share
+        // everything but the chain bookkeeping, and the random draws keep the
+        // order they always had.
+        if (!bubble_age && (bubble_chain ? --bubble_delay <= 0 : --bubble_counter <= 0)) {
+            int fresh = !bubble_chain;
             bubble_age = 1;
             bubble_length = SAMPLE_RATE / (10 + 2 * (NextRandom() & 3));
             bubble_frequency = 80.f + (NextNoise() * .5f + .5f) * 60.f;
             osc_y[5] = 0.f; osc_z[5] = 1.f;
+            if (fresh) bubble_chain = 6 * (2 + (NextRandom() & 3) + (int)(logo_burst * 2.f));
             bubble_chain--;
             bubble_delay = SAMPLE_RATE / (400 + (NextRandom() & 255));
-        } else if (!bubble_age && !bubble_chain && --bubble_counter <= 0) {
-            bubble_age = 1;
-            bubble_length = SAMPLE_RATE / (10 + 2 * (NextRandom() & 3));
-            bubble_frequency = 80.f + (NextNoise() * .5f + .5f) * 60.f;
-            osc_y[5] = 0.f; osc_z[5] = 1.f;
-            bubble_chain = 6 * (2 + (NextRandom() & 3) + (int)(logo_burst * 2.f)) - 1;
-            bubble_delay = SAMPLE_RATE / (400 + (NextRandom() & 255));
-            bubble_counter = (int)(SAMPLE_RATE * (1.2f + 2.2f * (NextNoise() * .5f + .5f)
+            if (fresh) bubble_counter = (int)(SAMPLE_RATE * (1.2f + 2.2f * (NextNoise() * .5f + .5f)
                 - .8f * logo_burst));
         }
         bubble = 0.f;

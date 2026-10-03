@@ -89,7 +89,10 @@ void main() {
     // above: at its extreme the same edge lands at -1.017 and the letter is cut
     // off the side. The extra distance buys the margin back and costs about a
     // tenth of the word's size.
-    vec3 offset = particle.xyz - direction * (.5 + .92 * reveal);
+    // The opening is a dive: the camera starts 1.8 units further out and swims in to
+    // the swarm over the first ten seconds, so the intro starts on the whole
+    // creature cloud and ends the dive among the colonies.
+    vec3 offset = particle.xyz - direction * (.5 + .92 * reveal + 1.8 * (1. - smoothstep(0., 10., t)));
     vec3 view = vec3(dot(offset, vec3(ca, 0., -sa)),
                      dot(offset, vec3(-sa * se, ce, -ca * se)),
                      -dot(offset, direction));
@@ -153,7 +156,11 @@ void main() {
     // frame. There is no gate: the shell's radius is negative before 17 and
     // past the swarm after about 21, so the term is zero outside that window.
     float shell = length(offset) - (t - 17.) * .5;
-    c *= 1. + 6. * exp(-30. * shell * shell);
+    // The same shell again as the last letter locks, around 37 seconds. The held
+    // word is 1.42 from the camera at its centre and up to 1.9 at its edges, so a
+    // shell widening from 1.36 sweeps across it from the middle outward.
+    float ring = length(offset) - 1.36 - (t - 37.) * .6;
+    c *= 1. + 6. * exp(-30. * shell * shell) + .7 * exp(-40. * ring * ring);
 
     // Brightness from speed, read straight out of the velocity half of the
     // buffer that nothing else in this shader touches. This is the reveal
