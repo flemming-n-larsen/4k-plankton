@@ -129,7 +129,7 @@ The synthesis itself is a small DSP loop, not a sample or a tracker song:
 - A second, slower waypoint nine seconds apart eases the amount of foam mixed in, so the ambience's brightness drifts between calmer and hissier over time. Nine is not a multiple of five, so the two envelopes drift against each other instead of lining up.
 - The foam gate has a floor under it, `.2 + .8 * shaped * shaped`. The squared swell on its own puts the foam through a 94x range and silences it outright for two seconds at a time whenever the waypoint lands near zero, which is what makes the ambience sound washy: the layer is not varying, it is switching off. With the floor, the foam's quiet extreme is 26% of its median instead of 4%, and no half-second window in the run falls below a quarter of the median. The foam mix and reveal boost are deliberately lower than the surf body, so its movement stays atmospheric rather than reading as constant noise.
 - The sum is passed through a soft-knee saturation (`x / (1 + |x|)`), not a hard clamp, so loud swells round off instead of clipping.
-- A scripted macro envelope over the top of those random swells follows the picture: quiet and close while the water is deep, opening out across the ascent, surging as the particles let go at thirty seconds, settling again over the held word, and fading with the image between forty-eight and fifty-six seconds. The surge opens the foam further than the level alone does, so the reveal arrives as a wash of white water rather than merely louder surf. Measured per-second RMS, as a fraction of the run's loudest second, runs about 0.04 through the deep opening, 0.24 by second twelve, 0.62 by second twenty-five, peaks at 1.00 during the migration and holds around 0.78 over the word before the fade takes it down. These windows are a fifth copy of the visual timeline and must be kept in step by hand.
+- A scripted macro envelope over the top of those random swells follows the picture: quiet and close while the water is deep, opening out across the ascent, swelling briefly under the wave of light at seventeen to twenty-one seconds, surging as the word snaps together at thirty-five, settling again over the held word, and fading with the image between forty-eight and fifty-six seconds. The surge opens the foam further than the level alone does, so the reveal arrives as a wash of white water rather than merely louder surf. Measured per-second RMS, as a fraction of the run's loudest second, runs about 0.04 through the deep opening, 0.24 by second twelve, 0.65 by second nineteen, peaks at 1.00 as the word snaps together at seconds 35 and 36, and stays above 0.9 through second forty before the fade takes it down. These windows are a fifth copy of the visual timeline and must be kept in step by hand.
 - The buffer is one shot covering the whole run rather than a short loop, which allows an envelope written against the clock, and it needs no crossfade at all. It is generated longer than `END_SECONDS` because audio plays in real time while the visuals are driven by `sim_time`: a machine that cannot hold 60 Hz stretches the picture against the sound, and the margin keeps the sound from running out first. A looped buffer was immune to that and this one is not, which is the price of having anything happen in the audio at a specific moment.
 - Generation writes 16-bit samples straight into the block handed to the player, with no float scratch buffer and no second allocation.
 - The 44-byte RIFF header is a table of eleven literal little-endian words copied into place, not a packed struct filled in field by field.
@@ -138,9 +138,9 @@ The synthesis itself is a small DSP loop, not a sample or a tracker song:
 The tonal layer sits on top of that bed:
 
 - Sine voices come from a magic-circle oscillator, `y += k * z; z -= k * y` with `k = 2*PI*f / SAMPLE_RATE`. It is a symplectic rotation, so its amplitude neither decays nor grows across the whole run - there is no lookup table to store, nothing to renormalise, and no `sinf`, which `/NODEFAULTLIB` has no library for. Its output starts at zero, so a voice entering mid-run enters silently, and `k` can be changed at any sample without disturbing the phase, which is what makes the chord changes click-free. The small-angle `k` puts the true frequency out by `k*k/24`, which is 0.002% at the pad pitches and 0.12% at the accent.
-- Three sustained voices play a five-chord progression in D minor - Dm, Dm/F, B-flat, F, Dm - changing at seconds 6, 16, 24, 30 and 38, so the harmony resolves brighter across the ascent and settles home under the held word. The voices sit in D3 to D4, above the surf body and below the foam band, so the chord occupies a gap in the ambience's spectrum rather than fighting it. No voice moves by more than a whole step at any change, which keeps an instantaneous pitch step reading as a chord change rather than a jump. Six distinct pitches serve fifteen chord slots, so the chords are stored as byte indices into a pitch table rather than as a flat grid of floats.
+- Three sustained voices play a five-chord progression in D minor - Dm, Dm/F, B-flat, F, Dm - changing at seconds 6, 18, 24, 30 and 38, so the harmony resolves brighter across the ascent and settles home under the held word. The voices sit in D3 to D4, above the surf body and below the foam band, so the chord occupies a gap in the ambience's spectrum rather than fighting it. No voice moves by more than a whole step at any change, which keeps an instantaneous pitch step reading as a chord change rather than a jump. Six distinct pitches serve fifteen chord slots, so the chords are stored as byte indices into a pitch table rather than as a flat grid of floats.
 - The pad is multiplied by the same macro envelope as the water, so it swells with the ascent and lifts at the reveal instead of sitting at one level and flattening the run's dynamics.
-- A sub at D2 enters between seconds 29 and 32 and leaves over seconds 43 to 53, so the reveal arrives with weight on a hall system rather than as nothing but more foam. A single tone at D5 is struck on the sample the word forms and decayed by a repeated multiply - an exponential with a 0.65 second time constant and no `expf`.
+- A sub at D2 enters between seconds 32 and 35 and leaves over seconds 43 to 53, so the reveal arrives with weight on a hall system rather than as nothing but more foam. A single tone at D5 is struck on the sample the word forms and decayed by a repeated multiply - an exponential with a 0.65 second time constant and no `expf`.
 - Bubble cascades use deeper sine sweeps starting at 80..140 Hz and rising to four times that frequency over 62..100 ms, with a rounded attack and diminishing tail. This follows frequency analysis of the user's `sine-bubbles-underwater-fx.wav` reference, adapted to the requested slower, deeper sound; the reference is not embedded. Gaps inside a cascade are about 1.5..2.5 ms, giving the stream a little more separation, and each cascade contains six times the previous number of bubbles. The gap before the next separate cascade varies randomly over roughly 1.2..3.4 seconds in open water, and a chain is guaranteed during the 30..36 second NUTS assembly. Cascades also become more frequent around the 48..56 second fade-out. These cues use the audio clock and can drift from the visuals on machines that cannot maintain the simulation rate.
 - The ambience passes through its own soft-knee saturation *before* the tonal layer is added, and the sum through a second one. Folding a sustained low pad into a single knee would let it dominate the knee and duck the water on every swell.
 
@@ -341,7 +341,9 @@ In `background.frag.glsl` every lit term already scaled with screen height, so
 the ascent folds into that single factor and drives the depth gradient, the
 caustics and the rays at once. `particles.vert.glsl` carries its own copy, easing
 off the distance absorption over the same seconds. Measured mean frame luminance
-runs 25.7 at five seconds, 44.7 at twenty and 76.6 at forty.
+ran 25.7 at five seconds, 44.7 at twenty and 76.6 at forty when first measured; after the
+background and sprite weights were pulled back (see Background and palette) it runs about
+35 at eight seconds, 43 at twenty and 63 at forty.
 
 ### NUTS formation
 
@@ -385,12 +387,12 @@ not survive was the opening: over an 8-second fade the frame at 2 seconds was
 90% below code value 16, which is an empty screen for the first seconds of a
 compo entry. At 5 seconds the same frame reads clearly as a swarm in deep water.
 The floor of the ascent was deliberately not raised to compensate - that would
-spend the contrast the arc is built on. The 9 is measured, not guessed: the ease ending is
-not the moment the logo stops moving, because the particles are still damping
-into their targets for another ~3.7 seconds after it. Frame-to-frame motion
-does not fall below noise until about 39.7 seconds, so the fade starts at 45 to
-leave a full 5 seconds of a genuinely settled logo. Timing it from the end of
-the ease instead makes the logo appear to fade the moment it arrives. The same `min` of two `smoothstep`s appears a
+spend the contrast the arc is built on. The ease ending is not the moment the
+logo stops moving, because the particles still have to damp into their targets.
+With the original spring (see the next paragraphs) that took about 3.7 more
+seconds and the letters were still soft at 40 seconds; with the stiffer spring
+they are sharp about a second after the ease ends. Timing the fade from the end
+of the ease instead makes the logo appear to fade the moment it arrives. The same `min` of two `smoothstep`s appears a
 third time in `background.frag.glsl`, folded multiplicatively into the particle
 colour and into the background's final colour, rather
 than added as a separate overlay quad.
@@ -454,6 +456,19 @@ measured frame ever shows it clipping, the fix is narrowing the entry window fur
 (34 to 33 or lower), not touching the shared brightness formula, which has its own,
 separately tuned history.
 
+**The spring is stiff enough to settle.** The seek force is
+`(target - position) * k` against a velocity damping of `exp(-17 * d)` per step.
+With the original `k = 9` that is a heavily overdamped system, `x'' + 17x' + 9x = 0`,
+whose slow root is -0.55 per second: a time constant of 1.8 seconds. A review
+render showed the letters still blurred at 40 seconds and only crisp near 44,
+when the release begins, so the logo had almost no time to be looked at. At
+`k = 60` the roots are -5 and -12 per second, a time constant near 0.2 seconds,
+and the word is sharp from about 37 seconds with about seven seconds of hold.
+The change is one literal. The speed-driven brightness accent below scales
+with the stiffer spring, so its coefficient dropped from 1.5 to .5 to keep the
+arrival from burning out into white blobs. The audio accent, sub and surge
+moved to the snap, at about 35.5 seconds.
+
 **The word is let go again.** The formation term is
 `smoothstep(30., 36., t) * (1. - smoothstep(44., 51., t))`, so after eight seconds
 of hold the seek force unwinds and the word comes apart before the fade takes
@@ -463,7 +478,7 @@ and in reverse: at that density the short-range repulsion tears the strokes
 open, and the type attractions gather what is left into cells, so the logo
 dissolves into living creatures instead of drifting apart as a cloud. The
 velocity-driven brightness below flares the swarm while it breaks up, so the
-release answers the surge at thirty seconds without a scripted flash. It costs
+release answers the surge at the snap without a scripted flash. It costs
 six bytes.
 
 Moving the letter targets outward instead - scaling `LetterTarget` up over the
@@ -513,12 +528,27 @@ its middle most of the time, and with six phases spread evenly the frame's total
 light never changes, so the eye reads a slow reshuffle of which species is
 brightest instead of a pulse. Against the scene's own drift between seconds 15
 and 18, the sine moves the red-tide species' emitted light by 1.7x and the cubed
-flash by 4.5x. The cubed shape's mean is exactly 5/16, so `.35 + 2.08 * pulse`
-averages to one and the flash costs no exposure; measured mean frame luminance
+flash by 4.5x. The cubed shape's mean is exactly 5/16, so `.5 + 1.6 * pulse`
+(originally `.35 + 2.08 * pulse`, before the peak was lowered to stop dense cores
+burning out) averages to one and the flash costs no exposure; measured mean frame luminance
 falls 2.5 to 3.5%, the bright peaks clipping in the dense cell cores. Writing it
 as a deviation from one lets the reveal damp it to a quarter with a single
 multiply, since a strobing logo hurts legibility and the speed accent below
 already owns that moment.
+
+**A wave of light crosses the free swim.** Eight, sixteen and twenty-four seconds
+looked alike in review, so between 17 and about 21 seconds a shell of light
+leaves the camera and sweeps outward through the swarm
+(`length(offset) - (t - 17.) * .5` in `particles.vert.glsl`, brightened by
+`1. + 6. * exp(-30. * shell * shell)`). It is centred on the camera, not the
+swarm: a shell around the swarm centre was tried first and only lit the few
+colonies that happen to lie on the camera's slice of it, which read as scattered
+flashes, while a shell around the camera crosses every direction at once and
+reads as a front rolling over the whole frame. No gate is needed, since the
+shell has negative radius before 17 seconds and is past the swarm after 21.
+Mean frame luminance rises about 35% at the peak. The audio gets a small swell
+under it and the chord change moves from 16 to 18 seconds to land on the front.
+It cost about 60 bytes with the audio.
 
 **The reveal accents itself.** `particles.vert.glsl` scales each particle's
 brightness by its own speed, read from the velocity half of the buffer that the
@@ -529,7 +559,7 @@ it lands exactly on the timeline without another constant to keep in step, and i
 resolves on its own as the particles stop. Mean frame luminance runs 55 just
 before the reveal, peaks at 85 as the word lands, and settles back to 78. While
 the cluster is merely drifting it reads as a faint twinkle on the fastest
-cells.
+cells. With the stiffer spring the coefficient is .5 instead of 1.5.
 
 ### Background and palette
 
@@ -577,6 +607,15 @@ from size so the layers do not show their rows. Density is the whole design
 problem here: at the obvious settings the frame fills with bubbles that compete
 with the plankton for attention, and the layer count and threshold exist to keep
 them a background presence.
+
+A review of the intro found the broad god rays and the many distinct bubbles still
+competing with the colonies, and some colonies burning out to near white and losing
+their detail. The god ray weight went from .9 to .55, the bubble brightness from .26
+to .15 and the threshold from .78 to .84 (with the gain raised to 6 so the surviving
+bubbles keep their strength), the sprite core weight from .5 to .44 and the species
+flash peak from 2.08 to 1.6. Pixels with a channel at 250 or more fell from about
+4.4% to 2.2% at eight seconds, at the price of about 13% of the mean luminance in
+the free-swim stretch. This is constants only and costs no bytes.
 
 The particles keep their plankton colours through the reveal - nothing brightens
 or desaturates when the word forms. Raising luminance for legibility was tried
