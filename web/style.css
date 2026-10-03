@@ -1,0 +1,169 @@
+:root {
+  color-scheme: dark;
+  font-family: Manrope, ui-sans-serif, system-ui, sans-serif;
+  background: #03111b;
+  color: #e5f2ee;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --muted: #91aaa9;
+  --cyan: #92f2df;
+}
+
+* { box-sizing: border-box; }
+
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+
+body {
+  background: radial-gradient(ellipse at 52% 44%, #092533 0, #03131e 48%, #020910 100%);
+}
+
+button, select { font: inherit; }
+
+#scene {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.shell {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.intro-card, .error-card, .end-card {
+  width: min(560px, calc(100vw - 40px));
+  padding: clamp(28px, 5vw, 54px);
+  border: 1px solid rgb(190 239 229 / 14%);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgb(8 29 40 / 92%), rgb(3 16 25 / 92%));
+  box-shadow: 0 30px 110px rgb(0 0 0 / 42%), inset 0 1px rgb(255 255 255 / 5%);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+  animation: arrive 700ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+.eyebrow, .fine-print, .hint, .quality-control > span, .wordmark {
+  font-family: 'DM Mono', ui-monospace, monospace;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+}
+
+.eyebrow {
+  margin: 0 0 17px;
+  color: var(--cyan);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+h1, h2 {
+  margin: 0;
+  color: #f3fbf8;
+  font-size: clamp(46px, 9vw, 76px);
+  font-weight: 600;
+  letter-spacing: -.075em;
+  line-height: .98;
+}
+
+h1 span, h2 span { color: #65cdbd; }
+
+.summary {
+  max-width: 390px;
+  margin: 24px 0 32px;
+  color: #b7c9c7;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.start-row { display: flex; align-items: center; flex-wrap: wrap; gap: 22px; }
+
+.primary-button {
+  min-height: 48px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 7px;
+  background: #a1f4df;
+  color: #06201e;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.primary-button:hover:not(:disabled) { background: #c1ffe9; transform: translateY(-1px); }
+.primary-button:disabled { cursor: wait; opacity: .65; }
+
+.quality-control { display: grid; gap: 7px; }
+.quality-control > span { color: var(--muted); font-size: 9px; }
+
+select {
+  max-width: 190px;
+  padding: 7px 28px 7px 0;
+  border: 0;
+  outline-color: var(--cyan);
+  background: transparent;
+  color: #e5f2ee;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+select option { color: #e5f2ee; background: #071923; }
+
+.hint { min-height: 14px; margin: 20px 0 0; color: var(--muted); font-size: 9px; letter-spacing: .08em; text-transform: none; }
+.fine-print { margin: 16px 0 0; color: #708b8d; font-size: 8px; line-height: 1.7; }
+
+.error-card h2, .end-card h2 { font-size: clamp(32px, 7vw, 54px); }
+.error-card > p:not(.eyebrow), .end-card > p:not(.eyebrow) { color: #b7c9c7; font-size: 14px; line-height: 1.7; }
+.error-card .fine-print { color: #708b8d; font-size: 8px; }
+.end-card .primary-button { margin-top: 14px; }
+
+.play-controls {
+  position: fixed;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  min-height: 60px;
+  padding: 0 26px;
+  background: linear-gradient(#03111b99, transparent);
+  pointer-events: auto;
+  opacity: .72;
+  transition: opacity 200ms ease;
+}
+
+.play-controls:hover { opacity: 1; }
+.wordmark { color: #d4e9e4; font-size: 9px; white-space: nowrap; }
+.wordmark span { color: var(--cyan); }
+.control-buttons { display: flex; gap: 8px; margin-left: auto; }
+
+.icon-button {
+  padding: 7px 10px;
+  border: 1px solid rgb(190 239 229 / 16%);
+  border-radius: 5px;
+  background: rgb(3 17 27 / 55%);
+  color: #c1d4d0;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.icon-button:hover { border-color: rgb(190 239 229 / 45%); color: #fff; }
+.timeline { position: absolute; inset: auto 0 0; height: 2px; background: rgb(190 239 229 / 16%); }
+.timeline > div { width: 0; height: 100%; background: var(--cyan); box-shadow: 0 0 10px #92f2df; }
+
+[hidden] { display: none !important; }
+
+@keyframes arrive { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 560px) {
+  .intro-card, .error-card, .end-card { border-radius: 16px; }
+  .summary { font-size: 14px; }
+  .start-row { align-items: flex-start; flex-direction: column; gap: 19px; }
+  .play-controls { min-height: 54px; padding: 0 14px; gap: 8px; }
+  .wordmark { font-size: 8px; }
+  .control-buttons { gap: 5px; }
+  .icon-button { padding: 7px 8px; font-size: 9px; }
+}
