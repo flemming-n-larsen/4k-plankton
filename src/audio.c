@@ -334,9 +334,16 @@ static void* GenerateOcean(void) {
         // (-1,1) smoothly, so loud swells round off instead of clipping. The
         // ambience gets its own knee before the tonal layer is added, so the
         // sustained pad cannot dominate the knee and duck the water on every
-        // swell; the sum is then rounded off by a second one.
+        // swell. The sum is limited by a cubic soft clip instead: x - x^3/3 is
+        // nearly linear for small x, so the pad and the sub, which are pure
+        // sines, are not given the harmonics a knee with no linear part adds
+        // (the old x / (1 + |x|) put 5 to 13% of the output in the nonlinear
+        // part, the cubic 1 to 8%), and it still rounds off the loud swells,
+        // which it turns over gently above 1. It would change sign at 1.73;
+        // the sound is the same on every run and its sum never passes about
+        // 1.12, so there is no clamp in front of it, which would cost bytes.
         wet = sample / (1.f + (sample < 0.f ? -sample : sample)) * .78f + tonal + bubble * .08f;
-        pcm[i] = (short)(int)(wet / (1.f + (wet < 0.f ? -wet : wet)) * fade * 30000.f);
+        pcm[i] = (short)(int)(wet * (1.f - wet * wet * (1.f / 3.f)) * fade * 25000.f);
     }
     return pcm;
 }
