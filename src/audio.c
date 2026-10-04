@@ -94,7 +94,7 @@ static const float letter_ratio[4] = { 1.f, 1.1892f, 1.4983f, 2.f };
 static float osc_y[VOICES];
 static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
 
-static float Oscillator(int voice, float frequency) {
+static float __vectorcall Oscillator(int voice, float frequency) {
     float k = frequency * TAU_PER_SAMPLE;
     osc_y[voice] += k * osc_z[voice];
     osc_z[voice] -= k * osc_y[voice];
@@ -132,7 +132,7 @@ static unsigned int NextRandom(void) {
 
 // Signed range, not unsigned: a direct float-to-unsigned cast pulls in a CRT
 // helper that /NODEFAULTLIB has no library for, while float-to-int does not.
-static float NextNoise(void) {
+static float __vectorcall NextNoise(void) {
     return (float)(int)NextRandom() * (1.f / 2147483648.f);
 }
 
@@ -149,14 +149,14 @@ static int waypoint_counter[2] = { SWELL_SAMPLES, TEXTURE_SAMPLES };
 // The envelope's times are whole numbers of half seconds, which keeps them
 // ints, and doubling is exact in floating point, so the result is bit for bit
 // what it was with the edges in seconds.
-static float Smoothstep(int edge0, int edge1, float x) {
+static float __vectorcall Smoothstep(int edge0, int edge1, float x) {
     float f = (x - (float)edge0) / (float)(edge1 - edge0);
     f = f < 0.f ? 0.f : f > 1.f ? 1.f : f;
     return f * f * (3.f - 2.f * f);
 }
 
 // Eases between two waypoints spaced period samples apart, smoothstepped.
-static float Waypoint(int slot, int period) {
+static float __vectorcall Waypoint(int slot, int period) {
     if (waypoint_counter[slot] >= period) {
         waypoint_counter[slot] = 0;
         waypoint_from[slot] = waypoint_to[slot];
