@@ -255,7 +255,7 @@ static int Run(void) {
     HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
     GLuint simulation, rendering, background;
     GLint delta_location, simulation_time_location, time_location, background_time_location;
-    int width; int height; DWORD start_ticks; float now; float sim_time; int sim_steps; int step;
+    int width; int height; float now; float sim_time; int sim_steps; int step;
 #ifdef DEBUG
     RECT client; MSG message;
 #endif
@@ -263,12 +263,8 @@ static int Run(void) {
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
     int forced_width = Option("-width", 0), forced_height = Option("-height", 0);
     int steps = Option("-steps", 1);
-    // "-lag<ms>" delays the picture's clock by that many milliseconds after the
-    // sound has been started, so a sound that is heard late can be lined up by
-    // ear before the value is baked into the Compo build.
-    int lag_ms = Option("-lag", 0);
-    // Timing log: when the sound device really starts and how the picture's
-    // clock and the sound's position move against each other.
+    // Timing log: when the sound device really starts, and how far the
+    // picture's sim time lags the sound's position, which is its clock.
     DWORD run_ticks = GetTickCount(), audio_ticks = 0;
     int first_frame_logged = 0, probe_started = 0, next_log_ms = 0;
     // "-record<fps>" (e.g. "-record30") captures every frame of a full,
@@ -371,27 +367,20 @@ static int Run(void) {
         audio_ticks = GetTickCount();
         text[0] = 0;
         AppendNumber(text, "since_run_ms", (int)(audio_ticks - run_ticks));
-        Report("audio started (PlaySound called):", text);
+        Report("audio started (waveOut written):", text);
     }
 #endif
     glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_POINT_SPRITE);
-    // Subtract ticks as integers before converting: GetTickCount grows to
-    // billions on a long-running machine, where float32 can no longer resolve a
-    // single frame.
-    start_ticks = GetTickCount(); sim_steps = 0; sim_time = 0.f;
-#ifdef DEBUG
-    start_ticks += lag_ms;
-#endif
+    sim_steps = 0; sim_time = 0.f;
     for (;;) {
 #ifdef DEBUG
         while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) DispatchMessageA(&message);
 #endif
         if (GetAsyncKeyState(VK_ESCAPE)) break;
-#ifdef DEBUG
-        now = (float)(int)(GetTickCount() - start_ticks) * .001f;
-#else
-        now = (float)(GetTickCount() - start_ticks) * .001f;
-#endif
+        // The sound's position is the only clock. The picture starts when the
+        // sound does and then follows it sample for sample, so the two cannot
+        // drift apart whatever the device's start-up delay or clock rate.
+        now = (float)AudioSamples() * (1.f / AUDIO_SAMPLE_RATE);
 #ifndef DEBUG
         if (sim_time >= END_SECONDS) break;
 #endif
@@ -454,7 +443,7 @@ static int Run(void) {
 #ifdef DEBUG
         {
             char text[96], *end;
-            int wall = (int)(GetTickCount() - start_ticks), position = AudioProbePosition();
+            int wall = (int)(GetTickCount() - audio_ticks), position = AudioSamples();
             if (!first_frame_logged) {
                 first_frame_logged = 1;
                 text[0] = 0;
@@ -468,16 +457,17 @@ static int Run(void) {
                 AppendNumber(end, "since_run_ms", (int)(GetTickCount() - run_ticks));
                 Report("sound device began playing:", text);
             }
-            // Every five seconds of live running: the picture's wall clock, its
-            // sim time and the silent stream's position, all in milliseconds.
+            // Every five seconds of live running: the wall clock since the sound
+            // was written, the sound's position and the picture's sim time, all
+            // in milliseconds. sim_minus_audio is how far the picture lags.
             if (!shot_frames && !live_seconds && !record_fps && wall >= next_log_ms) {
-                int sim_ms = (int)(sim_time * 1000.f), audio_ms = position < 0 ? -1 : (int)((float)position * (1000.f / 22050.f));
+                int sim_ms = (int)(sim_time * 1000.f), audio_ms = (int)((float)position * (1000.f / AUDIO_SAMPLE_RATE));
                 next_log_ms += 5000;
                 text[0] = 0;
                 end = AppendNumber(text, "wall", wall);
                 end = AppendNumber(end, "sim", sim_ms);
                 end = AppendNumber(end, "audio", audio_ms);
-                AppendNumber(end, "sim_minus_audio", audio_ms < 0 ? 0 : sim_ms - audio_ms);
+                AppendNumber(end, "sim_minus_audio", sim_ms - audio_ms);
                 Report("clock:", text);
             }
         }

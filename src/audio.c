@@ -2,31 +2,24 @@
 #include <windows.h>
 #include "audio.h"
 
-// mmsystem.h is excluded by WIN32_LEAN_AND_MEAN; the one function needed is
-// declared by hand instead, matching this project's style of avoiding extra
-// system headers.
-__declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module, DWORD flags);
-#define SND_ASYNC 1
-#define SND_NODEFAULT 2
-#define SND_MEMORY 4
-
-#ifdef DEBUG
-// The waveOut calls and structures needed to watch the sound device start,
-// declared by hand for the same reason PlaySoundA is: mmsystem.h is excluded.
+// mmsystem.h is excluded by WIN32_LEAN_AND_MEAN; the waveOut calls and
+// structures needed are declared by hand instead, matching this project's style
+// of avoiding extra system headers. waveOut rather than PlaySoundA, because it
+// can report how far the sound has played, which is the intro's clock.
 #pragma pack(push, 1)
-typedef struct { WORD tag, channels; DWORD rate, bytes_per_second; WORD block_align, bits, extra; } ProbeFormat;
-typedef struct { UINT type; DWORD value; DWORD unused; } ProbeTime;
+typedef struct { WORD tag, channels; DWORD rate, bytes_per_second; WORD block_align, bits, extra; } WaveFormat;
+typedef struct { UINT type; DWORD value; DWORD unused; } WaveTime;
 #pragma pack(pop)
-typedef struct ProbeHeader { char* data; DWORD length, recorded; DWORD_PTR user; DWORD flags, loops; struct ProbeHeader* next; DWORD_PTR reserved; } ProbeHeader;
+typedef struct { char* data; DWORD length, recorded; DWORD_PTR user; DWORD flags, loops; void* next; DWORD_PTR reserved; } WaveHeader;
 __declspec(dllimport) UINT __stdcall waveOutOpen(void** device, UINT id, const void* format, DWORD_PTR callback, DWORD_PTR instance, DWORD flags);
-__declspec(dllimport) UINT __stdcall waveOutPrepareHeader(void* device, ProbeHeader* header, UINT size);
-__declspec(dllimport) UINT __stdcall waveOutWrite(void* device, ProbeHeader* header, UINT size);
-__declspec(dllimport) UINT __stdcall waveOutGetPosition(void* device, ProbeTime* time, UINT size);
-static void* probe_device;
-static ProbeHeader probe_header;
-#endif
+__declspec(dllimport) UINT __stdcall waveOutPrepareHeader(void* device, WaveHeader* header, UINT size);
+__declspec(dllimport) UINT __stdcall waveOutWrite(void* device, WaveHeader* header, UINT size);
+__declspec(dllimport) UINT __stdcall waveOutGetPosition(void* device, WaveTime* time, UINT size);
+static void* device;
+static WaveHeader header;
+static DWORD fallback_ticks;
 
-#define SAMPLE_RATE 22050
+#define SAMPLE_RATE AUDIO_SAMPLE_RATE
 // One buffer covering the whole run rather than a short loop, so the envelope
 // can be written against the clock and put an event under the reveal. Longer
 // than END_SECONDS in src/intro.c, since a machine that cannot hold 60 Hz
@@ -108,10 +101,11 @@ static float Oscillator(int voice, float frequency) {
     return osc_y[voice];
 }
 
-// The 44-byte RIFF header as literal little-endian words rather than a packed
-// struct filled in field by field: mono 16-bit PCM at SAMPLE_RATE, with every
-// size a compile-time constant. Copying eleven words is far less code than
-// fifteen assignments and a four-character tag helper.
+#ifdef DEBUG
+// The 44-byte RIFF header, only for the ocean.wav the Debug build writes so the
+// sound can be reviewed outside the intro: the Compo build hands raw samples to
+// waveOut and needs no header at all. Literal little-endian words: mono 16-bit
+// PCM at SAMPLE_RATE, with every size a compile-time constant.
 static const unsigned wav_header[11] = {
     0x46464952,                 // "RIFF"
     36 + RUN_SAMPLES * 2,       // bytes after this field
@@ -125,6 +119,7 @@ static const unsigned wav_header[11] = {
     0x61746164,                 // "data"
     RUN_SAMPLES * 2
 };
+#endif
 
 static unsigned int rng_state;
 
@@ -203,17 +198,14 @@ static float Waypoint(int slot, int period) {
 // random waypoints, with a scripted macro envelope over the top. Because the
 // buffer is one shot rather than a loop, it needs no crossfade at all.
 static void* GenerateOcean(void) {
-    short* pcm;
-    void* block = VirtualAlloc(0, 44 + RUN_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
+    short* pcm = (short*)VirtualAlloc(0, RUN_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, foam3 = 0.f, previous_white = 0.f;
     float accent = 0.f, accent_ratio = 1.f;
     int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
     int logo_chain_started = 0;
     float bubble_frequency = 0.f;
-    if (!block) return 0;
-    for (i = 0; i < 11; i++) ((unsigned*)block)[i] = wav_header[i];
-    pcm = (short*)((char*)block + 44);
+    if (!pcm) return 0;
 
     rng_state = AUDIO_SEED;
     for (i = 0; i < RUN_SAMPLES; i++) {
@@ -333,42 +325,36 @@ static void* GenerateOcean(void) {
         wet = sample / (1.f + (sample < 0.f ? -sample : sample)) * .78f + tonal + bubble * .08f;
         pcm[i] = (short)(int)(wet / (1.f + (wet < 0.f ? -wet : wet)) * fade * 30000.f);
     }
-    return block;
+    return pcm;
 }
-
-#ifdef DEBUG
-// Opens the silent stream. It is opened before PlaySoundA is called, so it sees
-// the same cold device the real sound does; opening it afterwards would find
-// the device already awake and under-report any wake-up delay.
-static void AudioProbeStart(void) {
-    ProbeFormat format = { 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16, 0 };
-    probe_header.length = RUN_SAMPLES * 2;
-    probe_header.data = (char*)VirtualAlloc(0, probe_header.length, MEM_COMMIT, PAGE_READWRITE);
-    if (!probe_header.data) return;
-    if (waveOutOpen(&probe_device, (UINT)-1, &format, 0, 0, 0)) { probe_device = 0; return; }
-    waveOutPrepareHeader(probe_device, &probe_header, sizeof(probe_header));
-    waveOutWrite(probe_device, &probe_header, sizeof(probe_header));
-}
-
-int AudioProbePosition(void) {
-    ProbeTime time = { 2 };   // TIME_SAMPLES
-    if (!probe_device || waveOutGetPosition(probe_device, &time, sizeof(time)) || time.type != 2) return -1;
-    return (int)time.value;
-}
-#endif
 
 void AudioStart(void) {
-    void* wav = GenerateOcean();
-    if (!wav) return;
+    WaveFormat format = { 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16, 0 };
+    header.data = (char*)GenerateOcean();
+    header.length = RUN_SAMPLES * 2;
+    fallback_ticks = GetTickCount();
 #ifdef DEBUG
-    AudioProbeStart();
     // Written so the generated sound can be reviewed outside the running
     // intro; not part of the Compo path.
-    {
-        DWORD written; unsigned size = 44 + RUN_SAMPLES * 2;
+    if (header.data) {
+        DWORD written;
         HANDLE file = CreateFileA("ocean.wav", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-        if (file != INVALID_HANDLE_VALUE) { WriteFile(file, wav, size, &written, 0); CloseHandle(file); }
+        if (file != INVALID_HANDLE_VALUE) {
+            WriteFile(file, wav_header, 44, &written, 0);
+            WriteFile(file, header.data, header.length, &written, 0);
+            CloseHandle(file);
+        }
     }
 #endif
-    PlaySoundA(wav, 0, SND_ASYNC | SND_MEMORY | SND_NODEFAULT);
+    // Without a buffer or a device the intro still runs, on the tick count.
+    if (!header.data || waveOutOpen(&device, (UINT)-1, &format, 0, 0, 0)) { device = 0; return; }
+    waveOutPrepareHeader(device, &header, sizeof(header));
+    waveOutWrite(device, &header, sizeof(header));
+}
+
+int AudioSamples(void) {
+    WaveTime time = { 2 };    // TIME_SAMPLES
+    if (!device) return (int)((float)(int)(GetTickCount() - fallback_ticks) * (SAMPLE_RATE * .001f));
+    waveOutGetPosition(device, &time, sizeof(time));
+    return (int)time.value;
 }

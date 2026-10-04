@@ -38,8 +38,9 @@ Two rules constrain the code, not the packaging. The intro must render
 correctly at both required resolutions, so every screen-space quantity is
 derived from the viewport, never from pixel constants. And because both
 compo machines must show the same thing, the simulation is advanced by measured
-wall-clock time rather than per frame, so it evolves at the same rate
-regardless of frame rate.
+time rather than per frame, so it evolves at the same rate regardless of frame
+rate. That time is the sound's playback position, not a wall clock (see Audio
+direction).
 
 The entry ships as **three executables**, because the rules ask for a 1920x1080 and a 1280x720 version of the exe:
 
@@ -119,7 +120,9 @@ The project supports runtime-generated audio instead of embedding a WAV, MP3, or
 
 The audio is a synthesized ocean ambience, matching the underwater visuals, with a tonal layer over it that gives the run a key without giving it a beat. It lives in its own translation unit, `src/audio.c` / `src/audio.h`, keeping the audio subsystem's boundary with platform and graphics code visible in the source layout rather than only in comments.
 
-`AudioStart()` synthesizes the whole run into one buffer at startup and plays it through `PlaySoundA` as a single shot, not a loop. There is no stop call: the intro ends by exiting the process, which stops playback anyway, so a teardown function would only cost bytes. `mmsystem.h` is excluded by `WIN32_LEAN_AND_MEAN`, so `PlaySoundA` is declared by hand rather than pulling in that header, matching the rest of the codebase's style. This satisfies the swappable-backend part of the audio boundary below; a stable playback position for visual sync is not implemented, since nothing in the intro currently needs to react to the audio.
+`AudioStart()` synthesizes the whole run into one buffer of raw 16-bit samples at startup and plays it through `waveOut` as a single shot, not a loop. There is no stop call: the intro ends by exiting the process, which stops playback anyway, so a teardown function would only cost bytes. `mmsystem.h` is excluded by `WIN32_LEAN_AND_MEAN`, so the four `waveOut` functions and their structures are declared by hand rather than pulling in that header, matching the rest of the codebase's style.
+
+**The sound is the clock.** `AudioSamples()` returns how many samples the device has played, from `waveOutGetPosition` in `TIME_SAMPLES`, and `Run()` takes its time as that count divided by the sample rate. The picture therefore starts when the sound really starts and stays locked to it, instead of two clocks, a tick count for the picture and the sound card's own for the sound, that were started a few milliseconds apart and could be pulled apart. That matters when the device is slow to start: on one run the sound was heard seconds behind the picture, and an 8000 ms delay of the picture lined them up. With the sound as the clock the picture waits for it. The position is fine enough to drive the simulation: sampled in a tight loop it changes about every 0.1 ms, the first value arrives about 18 ms after the write, and it advances 1.0000 seconds per wall-clock second. If there is no buffer or no device, `AudioSamples()` counts from the call to `AudioStart` using `GetTickCount` instead, so the intro still plays, silently, rather than standing on a black frame; that fallback costs 22 bytes, and the whole change 44 (3985 to 4029). It does not help a machine that cannot compute 60 steps a second: the simulation cannot skip steps, because it must stay deterministic, so there the picture still falls behind the sound. The raw samples need no RIFF header, which the Debug build adds only when it writes `ocean.wav`.
 
 The synthesis itself is a small DSP loop, not a sample or a tracker song:
 
@@ -132,7 +135,7 @@ The synthesis itself is a small DSP loop, not a sample or a tracker song:
 - A scripted macro envelope over the top of those random swells follows the picture: quiet and close while the water is deep, opening out across the ascent, swelling briefly under the wave of light at seventeen to twenty-one seconds, surging as the word snaps together at thirty-five, settling again over the held word, and fading with the image between forty-eight and fifty-six seconds. The surge opens the foam further than the level alone does, so the reveal arrives as a wash of white water rather than merely louder surf. Measured per-second RMS, as a fraction of the run's loudest second, runs about 0.04 through the deep opening, 0.24 by second twelve, 0.65 by second nineteen, peaks at 1.00 as the word snaps together at seconds 35 and 36, and stays above 0.9 through second forty before the fade takes it down. These windows are a fifth copy of the visual timeline and must be kept in step by hand.
 - The buffer is one shot covering the whole run rather than a short loop, which allows an envelope written against the clock, and it needs no crossfade at all. It is generated longer than `END_SECONDS` because audio plays in real time while the visuals are driven by `sim_time`: a machine that cannot hold 60 Hz stretches the picture against the sound, and the margin keeps the sound from running out first. A looped buffer was immune to that and this one is not, which is the price of having anything happen in the audio at a specific moment.
 - Generation writes 16-bit samples straight into the block handed to the player, with no float scratch buffer and no second allocation.
-- The 44-byte RIFF header is a table of eleven literal little-endian words copied into place, not a packed struct filled in field by field.
+- The 44-byte RIFF header exists only in the Debug build, as a table of eleven literal little-endian words written in front of the samples in `ocean.wav`. The Compo build hands raw samples to `waveOut` and carries no header.
 - Generation is seeded by an explicit `AUDIO_SEED` constant, never the clock, so the ambience is identical on every run; change it to hear a different one.
 
 The tonal layer sits on top of that bed:
@@ -265,7 +268,7 @@ Three decisions are worth recording:
   named in comments instead, which are stripped and therefore free. The same
   applies to the timeline constants duplicated across the shaders: the seconds
   themselves appear in the code and the comment says what they mean.
-- **The simulation runs on a fixed timestep.** `Run()` accumulates real time but
+- **The simulation runs on a fixed timestep.** `Run()` follows the sound's time but
   integrates in constant `SIM_STEP` (1/60 s) increments, and every shader
   uniform is driven by `sim_time` rather than the wall clock. Feeding the real
   frame delta to the compute shader instead makes the run frame-rate dependent,
@@ -691,27 +694,20 @@ grab, by reading the back buffer in-process and writing `shot.bmp`:
 
 - `-shot<frames>` runs a fixed 60 Hz timestep and captures at that exact frame,
   which makes a frame reproducible;
-- `-live<seconds>` uses the real wall-clock timing path and captures after that
-  many seconds;
+- `-live<seconds>` uses the real timing path, with the sound's position as the clock,
+  and captures after that many seconds;
 - `-width<w> -height<h>` sizes the client area exactly, so the two required
   compo resolutions can be compared without changing display mode;
 - Timing log. Every Debug run attaches to the console it was started from and writes the same
-  lines to `in4k.log`: when `PlaySoundA` was called, when the first frame was presented, when
-  the sound device actually began consuming samples (watched through a second, silent
-  `waveOut` stream that `AudioStart` opens just before the real sound, so it sees the same
-  cold device), and every five seconds the picture's wall clock, its sim time and the silent
-  stream's position, with their difference. On the development machine the device starts
-  about 46 ms after the call and sim time runs about 20 ms ahead of the sound's position,
-  steady over ten seconds. Crinkler's unpack time is not part of this: it happens before
-  `Run()` starts, so the sound and the picture's clock both start after it, about 15 ms apart.
-  The unpack itself is large (about 11 seconds on that machine before the window appears) and
-  depends on the CPU. It is accepted: the size limit is the priority and the heavy
-  compression modes are what make the intro fit.
-- `-lag<ms>` delays the picture's clock by that many milliseconds after the sound has been
-  started. Playback through `PlaySoundA` begins some time after the call returns, so the
-  sound can be heard late against the picture (the letter tones of NUTS were reported this
-  way); run the Debug build live with a few values, for example `-lag150`, to find how much
-  delay lines them up by ear. Compiled out of Compo, so it costs no bytes there.
+  lines to `in4k.log`: when the samples were written to `waveOut`, when the first frame was
+  presented, when the sound device actually began playing, and every five seconds the wall
+  clock since the write, the sound's position and the picture's sim time, with how far the
+  picture lags (`sim_minus_audio`, always a little negative: one simulation step plus the time
+  to draw it, about 20 to 30 ms). The sound's position is the picture's clock, so there is no
+  drift to see. Crinkler's unpack time is not part of this: it happens before `Run()` starts.
+  The unpack itself is large (about 11 seconds on the development machine before the window
+  appears) and depends on the CPU. It is accepted: the size limit is the priority and the
+  heavy compression modes are what make the intro fit.
 - `-steps<k>` runs k simulation steps per rendered frame. Rendering never feeds
   back into the simulation, so this reaches a late state in a fraction of the
   wall-clock time while producing byte-identical output, since the simulation
@@ -744,5 +740,5 @@ The concrete installation and invocation details will be added to [toolchain.md]
 ## Decisions taken
 
 - **Audio backend**: hand-written DSP in `src/audio.c`, no synthesizer library and no embedded sample. See Audio direction above.
-- **Playback API**: `PlaySoundA` from `winmm.dll`, one shot, no loop and no teardown. DirectSound was not needed: nothing in the intro reads a playback position, and `PlaySoundA` is a single import against a buffer the intro already owns.
+- **Playback API**: `waveOut` from `winmm.dll` (open, prepare, write and get the position), one shot, no loop and no teardown. `PlaySoundA` was used first and cannot report how far the sound has played, so the picture ran on a separate tick-count clock. DirectSound was not needed: `waveOutGetPosition` gives the sample position directly. The sound's position is the intro's only clock.
 - **Generated files**: none are tracked. `out/` holds the executables, the Crinkler report and the generated shader headers; `.tools/` holds local third-party tools; `frames/` and `ocean.wav` are Debug output. All are rebuilt from source and ignored by Git.
