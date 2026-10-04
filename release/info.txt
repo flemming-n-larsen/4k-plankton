@@ -8,11 +8,13 @@ Length   : 59 seconds; exits on its own
 
 Description
 -----------
-A 3D Particle Life simulation: 16,384 plankton of 6 species swim through an
-underwater ascent, from the dark deep up toward the light. Near the end the
-swarm gathers into the word NUTS, then dissolves back into living cells.
-Everything is generated at runtime: the simulation, the background, and the
-ocean ambience.
+A 3D Particle Life simulation: 16,384 dots, divided into 6 species, make up
+the plankton. The species attract and repel each other, so the dots gather into
+colonies of living cells that swim and flash through an underwater ascent, from
+the dark deep up toward the light. A wave of light crosses the swarm, and near
+the end the dots gather, letter by letter, into the word NUTS, then dissolve
+back into living cells. Everything is generated at runtime: the simulation, the
+background, and the ocean ambience with its short four-note motif.
 
 Files
 -----
