@@ -144,9 +144,13 @@ static float waypoint_from[2], waypoint_to[2];
 static int waypoint_counter[2] = { SWELL_SAMPLES, TEXTURE_SAMPLES };
 
 // GLSL's smoothstep, which the envelope below leans on as heavily as the
-// shaders do. Waypoint was already computing one inline.
-static float Smoothstep(float edge0, float edge1, float x) {
-    float f = (x - edge0) / (edge1 - edge0);
+// shaders do. Waypoint was already computing one inline. The edges are ints:
+// a float constant is a five-byte push at every call, an int under 128 is two.
+// The envelope's times are whole numbers of half seconds, which keeps them
+// ints, and doubling is exact in floating point, so the result is bit for bit
+// what it was with the edges in seconds.
+static float Smoothstep(int edge0, int edge1, float x) {
+    float f = (x - (float)edge0) / (float)(edge1 - edge0);
     f = f < 0.f ? 0.f : f > 1.f ? 1.f : f;
     return f * f * (3.f - 2.f * f);
 }
@@ -159,7 +163,7 @@ static float Waypoint(int slot, int period) {
         waypoint_to[slot] = NextNoise() * .5f + .5f;
     }
     return waypoint_from[slot] + (waypoint_to[slot] - waypoint_from[slot])
-         * Smoothstep(0.f, (float)period, (float)waypoint_counter[slot]++);
+         * Smoothstep(0, period, (float)waypoint_counter[slot]++);
 }
 
 // Synthesizes the whole run's ocean ambience directly into the PCM block the
@@ -213,32 +217,33 @@ static void* GenerateOcean(void) {
         float white2 = NextNoise();
         float shaped, texture, foam_raw, sample, tonal, wet, bubble;
         int section, voice;
-        // Seconds into the run, which is what the macro envelope is written
-        // against. These windows must stay in step with the shaders: 6..30
-        // is the ascent, 34..36 is when the word snaps together, and 48..56 is
-        // the master fade.
-        float second = (float)i * (1.f / SAMPLE_RATE);
-        float arc = .3f + .7f * Smoothstep(6.f, 30.f, second);
+        // Half seconds into the run, which is what the macro envelope is
+        // written against: every number below that is compared with it is twice
+        // the time in seconds. These windows must stay in step with the shaders:
+        // 6..30 s is the ascent, 34..36 s is when the word snaps together, and
+        // 48..56 s is the master fade.
+        float half = (float)i * (2.f / SAMPLE_RATE);
+        float arc = .3f + .7f * Smoothstep(12, 60, half);
         // The small swell under the wave of light at 17..21, so the free-swim
         // stretch has an event the sound answers as well as the picture.
-        float surge = Smoothstep(31.f, 35.f, second) * (1.f - Smoothstep(37.f, 45.f, second))
-                    + .5f * Smoothstep(17.f, 19.f, second) * (1.f - Smoothstep(19.5f, 22.5f, second));
+        float surge = Smoothstep(62, 70, half) * (1.f - Smoothstep(74, 90, half))
+                    + .5f * Smoothstep(34, 38, half) * (1.f - Smoothstep(39, 45, half));
         float macro = arc + .6f * surge;
         // A few bubbles belong in the water throughout the run. Pack them
         // around the two visible transitions: formation at 30..36 and the
         // logo's fade-out at 48..56. These are broad windows so the sound
         // does not call attention to one arbitrary sample boundary.
-        float logo_burst = Smoothstep(29.f, 31.f, second) * (1.f - Smoothstep(35.f, 37.f, second))
-                         + Smoothstep(47.f, 49.f, second) * (1.f - Smoothstep(54.f, 56.f, second));
+        float logo_burst = Smoothstep(58, 62, half) * (1.f - Smoothstep(70, 74, half))
+                         + Smoothstep(94, 98, half) * (1.f - Smoothstep(108, 112, half));
         // Guarantee that the assembly has a live chain even if the previous
         // random chain happened to finish just before the logo starts.
-        if (second >= 30.f && second < 31.f && !logo_chain_started) {
+        if (half >= 60.f && half < 62.f && !logo_chain_started) {
             logo_chain_started = 1;
             if (!bubble_age && !bubble_chain) bubble_counter = 0;
         }
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
-        float fade = 1.f - Smoothstep(48.f, 56.f, second);
+        float fade = 1.f - Smoothstep(96, 112, half);
         surf1 += (white - surf1) * .035f;
         surf2 += (surf1 - surf2) * .035f;
         shaped = Waypoint(0, SWELL_SAMPLES);
@@ -251,19 +256,19 @@ static void* GenerateOcean(void) {
         foam3 += (foam2 - foam3) * .14f;
 
         // The chord section, on the same clock as the macro envelope above.
-        section = second < 18.f ? 0 : second < 24.f ? 1
-                : second < 30.f ? 2 : second < 38.f ? 3 : 4;
+        section = half < 36.f ? 0 : half < 48.f ? 1
+                : half < 60.f ? 2 : half < 76.f ? 3 : 4;
         tonal = 0.f;
         for (voice = 0; voice < 3; voice++)
             tonal += Oscillator(voice, pitch[chord[section][voice]]);
         // The pad rides the same macro envelope as the water, so the chord
         // swells with the ascent and lifts at the reveal instead of sitting
         // at one level and flattening the run's dynamics.
-        tonal *= .17f * macro * Smoothstep(6.f, 16.f, second);
+        tonal *= .17f * macro * Smoothstep(12, 32, half);
         // The sub is what gives the reveal weight on a hall system, rather
         // than letting it arrive as nothing but more foam.
         tonal += Oscillator(3, pitch[6]) * .25f
-               * Smoothstep(32.f, 35.f, second) * (1.f - Smoothstep(43.f, 53.f, second));
+               * Smoothstep(64, 70, half) * (1.f - Smoothstep(86, 106, half));
         // A struck tone for each letter as it locks, from 35.2 s every .55 s to
         // follow the left-to-right assembly in particles.comp.glsl, decayed by a
         // repeated multiply: an exponential with a 0.65 s time constant and no
