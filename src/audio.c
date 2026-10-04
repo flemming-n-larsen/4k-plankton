@@ -10,6 +10,22 @@ __declspec(dllimport) int __stdcall PlaySoundA(const void* sound, HMODULE module
 #define SND_NODEFAULT 2
 #define SND_MEMORY 4
 
+#ifdef DEBUG
+// The waveOut calls and structures needed to watch the sound device start,
+// declared by hand for the same reason PlaySoundA is: mmsystem.h is excluded.
+#pragma pack(push, 1)
+typedef struct { WORD tag, channels; DWORD rate, bytes_per_second; WORD block_align, bits, extra; } ProbeFormat;
+typedef struct { UINT type; DWORD value; DWORD unused; } ProbeTime;
+#pragma pack(pop)
+typedef struct ProbeHeader { char* data; DWORD length, recorded; DWORD_PTR user; DWORD flags, loops; struct ProbeHeader* next; DWORD_PTR reserved; } ProbeHeader;
+__declspec(dllimport) UINT __stdcall waveOutOpen(void** device, UINT id, const void* format, DWORD_PTR callback, DWORD_PTR instance, DWORD flags);
+__declspec(dllimport) UINT __stdcall waveOutPrepareHeader(void* device, ProbeHeader* header, UINT size);
+__declspec(dllimport) UINT __stdcall waveOutWrite(void* device, ProbeHeader* header, UINT size);
+__declspec(dllimport) UINT __stdcall waveOutGetPosition(void* device, ProbeTime* time, UINT size);
+static void* probe_device;
+static ProbeHeader probe_header;
+#endif
+
 #define SAMPLE_RATE 22050
 // One buffer covering the whole run rather than a short loop, so the envelope
 // can be written against the clock and put an event under the reveal. Longer
@@ -320,10 +336,32 @@ static void* GenerateOcean(void) {
     return block;
 }
 
+#ifdef DEBUG
+// Opens the silent stream. It is opened before PlaySoundA is called, so it sees
+// the same cold device the real sound does; opening it afterwards would find
+// the device already awake and under-report any wake-up delay.
+static void AudioProbeStart(void) {
+    ProbeFormat format = { 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16, 0 };
+    probe_header.length = RUN_SAMPLES * 2;
+    probe_header.data = (char*)VirtualAlloc(0, probe_header.length, MEM_COMMIT, PAGE_READWRITE);
+    if (!probe_header.data) return;
+    if (waveOutOpen(&probe_device, (UINT)-1, &format, 0, 0, 0)) { probe_device = 0; return; }
+    waveOutPrepareHeader(probe_device, &probe_header, sizeof(probe_header));
+    waveOutWrite(probe_device, &probe_header, sizeof(probe_header));
+}
+
+int AudioProbePosition(void) {
+    ProbeTime time = { 2 };   // TIME_SAMPLES
+    if (!probe_device || waveOutGetPosition(probe_device, &time, sizeof(time)) || time.type != 2) return -1;
+    return (int)time.value;
+}
+#endif
+
 void AudioStart(void) {
     void* wav = GenerateOcean();
     if (!wav) return;
 #ifdef DEBUG
+    AudioProbeStart();
     // Written so the generated sound can be reviewed outside the running
     // intro; not part of the Compo path.
     {

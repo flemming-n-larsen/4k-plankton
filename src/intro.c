@@ -127,12 +127,33 @@ static PROC gl_functions[GL_FUNCTION_COUNT];
 static void Report(const char* label, const char* text) {
     DWORD written;
     HANDLE file = CreateFileA("in4k.log", FILE_APPEND_DATA, FILE_SHARE_READ, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    HANDLE console = GetStdHandle(STD_OUTPUT_HANDLE);
     OutputDebugStringA(label); OutputDebugStringA(text); OutputDebugStringA("\n");
+    // Run() attaches to the parent console, so the same lines show in the
+    // PowerShell window the Debug build was started from.
+    if (console && console != INVALID_HANDLE_VALUE) {
+        WriteFile(console, label, (DWORD)lstrlenA(label), &written, 0);
+        WriteFile(console, text, (DWORD)lstrlenA(text), &written, 0);
+        WriteFile(console, "\r\n", 2, &written, 0);
+    }
     if (file == INVALID_HANDLE_VALUE) return;
     WriteFile(file, label, (DWORD)lstrlenA(label), &written, 0);
     WriteFile(file, text, (DWORD)lstrlenA(text), &written, 0);
     WriteFile(file, "\r\n", 2, &written, 0);
     CloseHandle(file);
+}
+
+// Appends " name=value" to the text at position; there is no CRT to format it.
+static char* AppendNumber(char* position, const char* name, int value) {
+    char digits[12]; int count = 0, index;
+    *position++ = ' ';
+    for (; *name; name++) *position++ = *name;
+    *position++ = '=';
+    if (value < 0) { *position++ = '-'; value = -value; }
+    do { digits[count++] = (char)('0' + value % 10); value /= 10; } while (value);
+    for (index = count - 1; index >= 0; index--) *position++ = digits[index];
+    *position = 0;
+    return position;
 }
 
 #ifndef GL_BGR_EXT
@@ -248,11 +269,16 @@ static int Run(void) {
     // sound has been started, so a sound that is heard late can be lined up by
     // ear before the value is baked into the Compo build.
     int lag_ms = Option("-lag", 0);
+    // Timing log: when the sound device really starts and how the picture's
+    // clock and the sound's position move against each other.
+    DWORD run_ticks = GetTickCount(), audio_ticks = 0;
+    int first_frame_logged = 0, probe_started = 0, next_log_ms = 0;
     // "-record<fps>" (e.g. "-record30") captures every frame of a full,
     // deterministic run to frames/frameNNNNN.bmp at that frame rate, for
     // stitching into a video externally - see docs/toolchain.md.
     int record_fps = Option("-record", 30);
     if (record_fps) CreateDirectoryA("frames", 0);
+    AttachConsole((DWORD)-1);
 #endif
     // The predefined "static" class rather than one of our own: it already has
     // a window procedure, which saves registering a class and writing one. The
@@ -335,6 +361,15 @@ static int Run(void) {
     if (steps < 1) steps = 1;
 #endif
     AudioStart();
+#ifdef DEBUG
+    {
+        char text[96];
+        audio_ticks = GetTickCount();
+        text[0] = 0;
+        AppendNumber(text, "since_run_ms", (int)(audio_ticks - run_ticks));
+        Report("audio started (PlaySound called):", text);
+    }
+#endif
     glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_POINT_SPRITE);
     // Subtract ticks as integers before converting: GetTickCount grows to
     // billions on a long-running machine, where float32 can no longer resolve a
@@ -412,6 +447,37 @@ static int Run(void) {
         }
 #endif
         SwapBuffers(device_context);
+#ifdef DEBUG
+        {
+            char text[96], *end;
+            int wall = (int)(GetTickCount() - start_ticks), position = AudioProbePosition();
+            if (!first_frame_logged) {
+                first_frame_logged = 1;
+                text[0] = 0;
+                AppendNumber(text, "since_run_ms", (int)(GetTickCount() - run_ticks));
+                Report("first frame presented:", text);
+            }
+            if (position > 0 && !probe_started) {
+                probe_started = 1;
+                text[0] = 0;
+                end = AppendNumber(text, "since_audio_start_ms", (int)(GetTickCount() - audio_ticks));
+                AppendNumber(end, "since_run_ms", (int)(GetTickCount() - run_ticks));
+                Report("sound device began playing:", text);
+            }
+            // Every five seconds of live running: the picture's wall clock, its
+            // sim time and the silent stream's position, all in milliseconds.
+            if (!shot_frames && !live_seconds && !record_fps && wall >= next_log_ms) {
+                int sim_ms = (int)(sim_time * 1000.f), audio_ms = position < 0 ? -1 : (int)((float)position * (1000.f / 22050.f));
+                next_log_ms += 5000;
+                text[0] = 0;
+                end = AppendNumber(text, "wall", wall);
+                end = AppendNumber(end, "sim", sim_ms);
+                end = AppendNumber(end, "audio", audio_ms);
+                AppendNumber(end, "sim_minus_audio", audio_ms < 0 ? 0 : sim_ms - audio_ms);
+                Report("clock:", text);
+            }
+        }
+#endif
     }
     // No teardown: ExitProcess drops the render context, the device context and
     // the sound along with the process.

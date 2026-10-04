@@ -682,6 +682,18 @@ grab, by reading the back buffer in-process and writing `shot.bmp`:
   many seconds;
 - `-width<w> -height<h>` sizes the client area exactly, so the two required
   compo resolutions can be compared without changing display mode;
+- Timing log. Every Debug run attaches to the console it was started from and writes the same
+  lines to `in4k.log`: when `PlaySoundA` was called, when the first frame was presented, when
+  the sound device actually began consuming samples (watched through a second, silent
+  `waveOut` stream that `AudioStart` opens just before the real sound, so it sees the same
+  cold device), and every five seconds the picture's wall clock, its sim time and the silent
+  stream's position, with their difference. On the development machine the device starts
+  about 46 ms after the call and sim time runs about 20 ms ahead of the sound's position,
+  steady over ten seconds. Crinkler's unpack time is not part of this: it happens before
+  `Run()` starts, so the sound and the picture's clock both start after it, about 15 ms apart.
+  The unpack itself is large (about 11 seconds on that machine before the window appears) and
+  depends on the CPU. It is accepted: the size limit is the priority and the heavy
+  compression modes are what make the intro fit.
 - `-lag<ms>` delays the picture's clock by that many milliseconds after the sound has been
   started. Playback through `PlaySoundA` begins some time after the call returns, so the
   sound can be heard late against the picture (the letter tones of NUTS were reported this
