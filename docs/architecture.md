@@ -595,6 +595,32 @@ Mean frame luminance rises about 35% at the peak. The audio gets a small swell
 under it and the chord change moves from 16 to 18 seconds to land on the front.
 It cost about 60 bytes with the audio.
 
+**Calm before, a mark after.** A second review found that the wave helped but that the picture
+before it, during it and after it had much the same density, shapes and composition, and
+asked for calm before the wave, a marked change, and a visible aftermath. Measured as mean
+luminance in 1280x720 captures the old wave was a flash of about a second and a half, 40 to
+54 and back to 46, with nothing before it and nothing after. Mean luminance is a poor gauge
+for the species flashes, whose mean is held at one by design, so the frames were looked at as
+well. Four changes, all in `particles.vert.glsl` and costing 34 bytes:
+
+- the species flashes are held to a fifth of their strength until the wave (`awake`, a
+  `smoothstep(17., 21., t)`), which wakes them, so the swim before it is calm and the swim
+  after it is lively;
+- the light dips by 60% for a moment centred on 17.9 seconds, as if the water drew breath,
+  `1 - .6 * exp(-3 * (t - 17.9)^2)`: mean luminance 39.5 down to 35.2 at 18 s;
+- once the wave has passed the swarm keeps a glow of +60% that fades over the next nine
+  seconds (`smoothstep(18., 20., t) * (1. - smoothstep(21., 30., t))`), and the wave itself
+  peaks at 59 instead of 54;
+- the wave washes the water clear: the depth absorption of the plankton colours is lowered
+  by .3 once it has passed, which is permanent, so the colonies are more saturated for the
+  rest of the run (the held word moves by about 1% in mean luminance).
+
+The ambience follows with a hush: `macro` is multiplied by `1 - .5 * hush`, where `hush` is a
+triangle of two smoothsteps over 16.5 to 19.5 seconds, so the sound falls to 63% at 17.5 to 18
+seconds and swells back as the wave and the second statement of the motif arrive at 18.6
+seconds (RMS per half second, old and new: 4420 and 2777 at 18.0 s, 5028 and 4860 at 19.0 s;
+nothing changes before 16.5 s or after 19.5 s). That cost 26 bytes.
+
 **The reveal accents itself.** `particles.vert.glsl` scales each particle's
 brightness by its own speed, read from the velocity half of the buffer that the
 vertex shader otherwise never touches. For the six seconds of the migration every

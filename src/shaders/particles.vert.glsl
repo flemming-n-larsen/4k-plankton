@@ -114,8 +114,11 @@ void main() {
     // scene rises toward the surface over seconds 4 to 40, so the plankton
     // regain saturation on the way up; must match the ascent in
     // background.frag.glsl.
+    // The wave also washes the water clear: the plankton regain a third more of
+    // their colour once it has passed (awake, 17..21 seconds).
+    float awake = smoothstep(17., 21., t);
     c = mix(c, vec3(.02, .08, .15),
-            clamp((view.z - 1.) / 2.5, 0., 1.) * (.75 - .25 * smoothstep(4., 40., t)));
+            clamp((view.z - 1.) / 2.5, 0., 1.) * (.75 - .25 * smoothstep(4., 40., t) - .3 * awake));
 
     // Bioluminescent pulse. The six species flash and go dark in turn, a sixth
     // of a cycle apart, over a five-second period. This is keyed to the type
@@ -145,7 +148,9 @@ void main() {
     // 1.2566 is 2*PI/5 for the period, 1.0472 is 2*PI/6 for the phase step.
     float pulse = .5 + .5 * sin(t * 1.2566 + particle.w * 1.0472);
     pulse *= pulse * pulse;
-    c *= 1. + (1. - .75 * reveal) * (1.6 * pulse - .5);
+    // The flashes are held to a fifth of their strength until the wave, which
+    // wakes them: the free swim before it is calm, and what follows is not.
+    c *= 1. + (1. - .75 * reveal) * (.2 + .8 * awake) * (1.6 * pulse - .5);
 
     // The wave. Between 17 and about 21 seconds a shell of light leaves the
     // camera and sweeps outward through the swarm, which is the one event in
@@ -160,7 +165,13 @@ void main() {
     // word is 1.42 from the camera at its centre and up to 1.9 at its edges, so a
     // shell widening from 1.36 sweeps across it from the middle outward.
     float ring = length(offset) - 1.36 - (t - 37.) * .6;
-    c *= 1. + 6. * exp(-30. * shell * shell) + .7 * exp(-40. * ring * ring);
+    // Around the wave: the light dips for a moment just before it arrives, as
+    // if the water drew breath, and once it has passed the swarm keeps a glow
+    // that fades over the next nine seconds, so the wave leaves a mark.
+    float breath = t - 17.9;
+    c *= (1. - .6 * exp(-3. * breath * breath))
+       * (1. + .6 * smoothstep(18., 20., t) * (1. - smoothstep(21., 30., t)))
+       * (1. + 6. * exp(-30. * shell * shell) + .7 * exp(-40. * ring * ring));
 
     // Brightness from speed, read straight out of the velocity half of the
     // buffer that nothing else in this shader touches. This is the reveal

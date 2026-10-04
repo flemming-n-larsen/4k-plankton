@@ -232,7 +232,10 @@ static void* GenerateOcean(void) {
         // stretch has an event the sound answers as well as the picture.
         float surge = Smoothstep(62, 70, half) * (1.f - Smoothstep(74, 90, half))
                     + .5f * Smoothstep(34, 38, half) * (1.f - Smoothstep(39, 45, half));
-        float macro = arc + .6f * surge;
+        // A hush in the water around 18 s, a moment before the wave of light
+        // arrives, which the picture shows as the dip in its brightness.
+        float hush = Smoothstep(33, 36, half) * (1.f - Smoothstep(36, 39, half));
+        float macro = (arc + .6f * surge) * (1.f - .5f * hush);
         // A few bubbles belong in the water throughout the run. Pack them
         // around the two visible transitions: formation at 30..36 and the
         // logo's fade-out at 48..56. These are broad windows so the sound
