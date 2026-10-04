@@ -105,7 +105,7 @@ function Invoke-ShaderGeneration([bool]$Minify, [string]$OutputDirectory, $Toolc
         $shaderInput = $source
         if ($Minify) {
             $shaderInput = Join-Path $shaderDirectory $shader.file
-            Invoke-Native $Toolchain.shaderMinifier @('--format', 'text', '--preserve-externals', '-o', $shaderInput, $source)
+            Invoke-Native $Toolchain.shaderMinifier @('--format', 'text', '--preserve-externals', '--field-names', 'stpq', '-o', $shaderInput, $source)
         }
         "static const char* $($shader.symbol) =`r`n$(ConvertTo-CString (Get-Content -Raw $shaderInput));"
     }

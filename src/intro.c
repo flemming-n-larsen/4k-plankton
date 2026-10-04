@@ -58,7 +58,6 @@ typedef void (APIENTRYP PFNGLUSEPROGRAMPROC)(GLuint program);
 typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar* name);
 typedef void (APIENTRYP PFNGLUNIFORM1FPROC)(GLint location, GLfloat value);
 typedef void (APIENTRYP PFNGLUNIFORM2FPROC)(GLint location, GLfloat x, GLfloat y);
-typedef void (APIENTRYP PFNGLGENBUFFERSPROC)(GLsizei count, GLuint* buffers);
 typedef void (APIENTRYP PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);
 typedef void (APIENTRYP PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const void* data, GLenum usage);
 typedef void (APIENTRYP PFNGLBINDBUFFERBASEPROC)(GLenum target, GLuint index, GLuint buffer);
@@ -76,7 +75,7 @@ typedef void (APIENTRYP PFNGLGETPROGRAMINFOLOGPROC)(GLuint program, GLsizei max_
 static const char gl_names[] =
     "glCreateShader\0glShaderSource\0glCompileShader\0glCreateProgram\0glAttachShader\0"
     "glLinkProgram\0glUseProgram\0glGetUniformLocation\0glUniform1f\0glUniform2f\0"
-    "glGenBuffers\0glBindBuffer\0glBufferData\0glBindBufferBase\0glDispatchCompute\0glMemoryBarrier\0"
+    "glBindBuffer\0glBufferData\0glBindBufferBase\0glDispatchCompute\0glMemoryBarrier\0"
 #ifdef DEBUG
     "glGetShaderiv\0glGetShaderInfoLog\0glGetProgramiv\0glGetProgramInfoLog\0"
 #endif
@@ -86,7 +85,7 @@ enum {
     GL_FUNCTION_CREATE_SHADER, GL_FUNCTION_SHADER_SOURCE, GL_FUNCTION_COMPILE_SHADER,
     GL_FUNCTION_CREATE_PROGRAM, GL_FUNCTION_ATTACH_SHADER, GL_FUNCTION_LINK_PROGRAM,
     GL_FUNCTION_USE_PROGRAM, GL_FUNCTION_GET_UNIFORM_LOCATION, GL_FUNCTION_UNIFORM_1F,
-    GL_FUNCTION_UNIFORM_2F, GL_FUNCTION_GEN_BUFFERS, GL_FUNCTION_BIND_BUFFER,
+    GL_FUNCTION_UNIFORM_2F, GL_FUNCTION_BIND_BUFFER,
     GL_FUNCTION_BUFFER_DATA, GL_FUNCTION_BIND_BUFFER_BASE, GL_FUNCTION_DISPATCH_COMPUTE,
     GL_FUNCTION_MEMORY_BARRIER,
 #ifdef DEBUG
@@ -108,7 +107,6 @@ static PROC gl_functions[GL_FUNCTION_COUNT];
 #define glGetUniformLocation_ ((PFNGLGETUNIFORMLOCATIONPROC)gl_functions[GL_FUNCTION_GET_UNIFORM_LOCATION])
 #define glUniform1f_ ((PFNGLUNIFORM1FPROC)gl_functions[GL_FUNCTION_UNIFORM_1F])
 #define glUniform2f_ ((PFNGLUNIFORM2FPROC)gl_functions[GL_FUNCTION_UNIFORM_2F])
-#define glGenBuffers_ ((PFNGLGENBUFFERSPROC)gl_functions[GL_FUNCTION_GEN_BUFFERS])
 #define glBindBuffer_ ((PFNGLBINDBUFFERPROC)gl_functions[GL_FUNCTION_BIND_BUFFER])
 #define glBufferData_ ((PFNGLBUFFERDATAPROC)gl_functions[GL_FUNCTION_BUFFER_DATA])
 #define glBindBufferBase_ ((PFNGLBINDBUFFERBASEPROC)gl_functions[GL_FUNCTION_BIND_BUFFER_BASE])
@@ -255,7 +253,7 @@ static void LinkProgram(GLuint program) {
 static int Run(void) {
     PIXELFORMATDESCRIPTOR pixel_format = {0};
     HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
-    GLuint simulation, rendering, background, buffer;
+    GLuint simulation, rendering, background;
     GLint delta_location, simulation_time_location, time_location, background_time_location;
     int width; int height; DWORD start_ticks; float now; float sim_time; int sim_steps; int step;
 #ifdef DEBUG
@@ -352,10 +350,11 @@ static int Run(void) {
     glUseProgram_(background);
     glUniform2f_(glGetUniformLocation_(background, "r"), (float)width, (float)height);
 
-    glGenBuffers_(1, &buffer);
-    glBindBuffer_(GL_SHADER_STORAGE_BUFFER, buffer);
+    // Buffer name 1 is used without glGenBuffers: the compatibility profile
+    // creates an object for any unused name when it is first bound.
+    glBindBuffer_(GL_SHADER_STORAGE_BUFFER, 1);
     glBufferData_(GL_SHADER_STORAGE_BUFFER, PARTICLE_COUNT * 32, 0, GL_STATIC_DRAW);
-    glBindBufferBase_(GL_SHADER_STORAGE_BUFFER, 0, buffer);
+    glBindBufferBase_(GL_SHADER_STORAGE_BUFFER, 0, 1);
 
     // Uniforms link to zero, so this first dispatch runs the shader init branch.
     glUseProgram_(simulation);
