@@ -87,9 +87,13 @@ static const unsigned char chord[5][3] = {
     { 1, 2, 3 }     // from 38s   Dm
 };
 
-// Ratios above D5 for the four letters of the word, as each one locks: D, F,
-// A, then D an octave up, an arpeggio of the key.
-static const float letter_ratio[4] = { 1.f, 1.1892f, 1.4983f, 2.f };
+// The motif: four struck tones, ratios above D5, D, F, A and then D an octave
+// up, an arpeggio of the key. It is first heard twice as a question that stops
+// on F, softly at 12 s and louder under the wave of light at 18.6 s, and then
+// answered, resolving on the high D, as the four letters of the word lock.
+// Start times are in fifths of a second.
+static const float motif_ratio[4] = { 1.f, 1.1892f, 1.4983f, 2.f };
+static const unsigned char motif_start[3] = { 60, 93, 176 };
 
 static float osc_y[VOICES];
 static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
@@ -269,15 +273,16 @@ static void* GenerateOcean(void) {
         // than letting it arrive as nothing but more foam.
         tonal += Oscillator(3, pitch[6]) * .25f
                * Smoothstep(64, 70, half) * (1.f - Smoothstep(86, 106, half));
-        // A struck tone for each letter as it locks, from 35.2 s every .55 s to
-        // follow the left-to-right assembly in particles.comp.glsl, decayed by a
+        // The motif, a struck tone every .55 s. The last of the three
+        // statements is the one that follows the left-to-right assembly of
+        // the letters in particles.comp.glsl. Each tone is decayed by a
         // repeated multiply: an exponential with a 0.65 s time constant and no
         // expf.
-        {
-            int hit = i - (35 * SAMPLE_RATE + SAMPLE_RATE / 5), gap = SAMPLE_RATE * 55 / 100;
-            if (hit >= 0 && hit % gap == 0 && hit / gap < 4) {
-                accent = 1.f;
-                accent_ratio = letter_ratio[hit / gap];
+        for (voice = 0; voice < 3; voice++) {
+            int hit = i - motif_start[voice] * (SAMPLE_RATE / 5), gap = SAMPLE_RATE * 55 / 100, note = hit / gap;
+            if (hit >= 0 && hit % gap == 0 && note < 4) {
+                accent = .3f + .35f * voice;
+                accent_ratio = motif_ratio[note == 3 && voice < 2 ? 1 : note];
             }
         }
         tonal += Oscillator(4, pitch[7] * accent_ratio) * accent * .18f;
