@@ -6,6 +6,10 @@ param(
     # to the minifier flags can be compared frame-by-frame with the capture
     # options in src/intro.c rather than only by eye on the Compo build.
     [switch]$MinifyShaders,
+    # Debug build only: compiles with the Compo optimization flags instead of
+    # /Od, so the synthesized ocean.wav is what the Compo build really plays.
+    # Optimized code can round floating point differently from unoptimized code.
+    [switch]$Optimize,
     [ValidateSet('', '1920x1080', '1280x720')][string]$Resolution = '',
     [switch]$Run,
     # Compo build only: also copies the verified executable to release/ so the
@@ -127,12 +131,16 @@ $exeName = if ($Resolution) { "plankton_$Resolution.exe" } else { 'plankton.exe'
 $outputDirectory = Join-Path $repoRoot (Join-Path 'out' $variant); $objectDirectory = Join-Path $outputDirectory 'obj'
 New-Item -ItemType Directory -Force -Path $objectDirectory | Out-Null
 $generatedDirectory = Invoke-ShaderGeneration ($MinifyShaders -or $Configuration -eq 'Compo') $outputDirectory $toolchain
+# /Oy- keeps a frame pointer, which makes the many float spills in the audio code one
+# byte shorter each; /Ob0 stops inlining, which the size of the audio code does not
+# survive. Together they are 75 bytes smaller than /O1 /Os alone.
+$optimizationFlags = @('/O1', '/Os', '/Oy-', '/Ob0')
 $sourceFiles = @('intro.c', 'audio.c'); $executable = Join-Path $outputDirectory $exeName
 $objects = foreach ($sourceFile in $sourceFiles) {
     $source = Join-Path $repoRoot (Join-Path 'src' $sourceFile)
     $object = Join-Path $objectDirectory ($sourceFile -replace '\.c$', '.obj')
     $compileArguments = @('/nologo', '/c', '/TC', '/Zl', '/GS-', '/W4', "/I$generatedDirectory", "/Fo$object", $source)
-    if ($Configuration -eq 'Debug') { $compileArguments += @('/Od', '/Z7', '/DDEBUG') } else { $compileArguments += @('/O1', '/Os', '/DWIN32', '/DCOMPO'); if ($Resolution) { $compileArguments += @("/DCOMPO_WIDTH=$($Resolution.Split('x')[0])", "/DCOMPO_HEIGHT=$($Resolution.Split('x')[1])") } }
+    if ($Configuration -eq 'Debug') { $compileArguments += @('/Z7', '/DDEBUG') + $(if ($Optimize) { $optimizationFlags } else { @('/Od') }) } else { $compileArguments += $optimizationFlags + @('/DWIN32', '/DCOMPO'); if ($Resolution) { $compileArguments += @("/DCOMPO_WIDTH=$($Resolution.Split('x')[0])", "/DCOMPO_HEIGHT=$($Resolution.Split('x')[1])") } }
     Invoke-Native 'cl.exe' $compileArguments
     $object
 }

@@ -53,11 +53,20 @@ The intended public interface is a repository-owned PowerShell script:
 .\build.ps1 -Configuration Debug
 .\build.ps1 -Configuration Compo
 .\build.ps1 -Configuration Debug -MinifyShaders
+.\build.ps1 -Configuration Debug -Optimize
 ```
 
 `-MinifyShaders` runs the Compo shader-minification pass for a Debug build, so a
 change to the minifier or to the shaders can be compared frame-by-frame with the
 capture options in `src/intro.c` rather than only by eye on the Compo build.
+
+`-Optimize` compiles the Debug build with the Compo optimization flags instead of
+`/Od`. The synthesized `ocean.wav` is then what the Compo build really plays:
+optimized code can round floating point differently from unoptimized code (an
+optimized build of the old audio code differed from the unoptimized one in 3 of
+1.65 million samples, by one bit, before the helpers were made `__vectorcall`).
+Build a reference `ocean.wav` from the commit being compared against and `cmp` the
+two to prove that a size change did not touch the sound.
 
 The script is responsible for:
 
@@ -73,8 +82,8 @@ Compiler and linker commands should remain visible in build output so size regre
 
 | Stage | Options | Why |
 | --- | --- | --- |
-| `cl.exe`, Compo | `/O1 /Os /Zl /GS- /TC /DWIN32 /DCOMPO` | Optimize for size, no CRT, no stack cookies. `/arch:IA32` is *not* usable: x87 float-to-int conversion emits a call to a CRT helper that `/NODEFAULTLIB` cannot resolve. `/Gr` and `/Gv` build but come out slightly larger. |
-| Shader Minifier | `--format text --preserve-externals` | Uniform and interface-block names are looked up by name from C, so they must survive. `--preprocess` is a no-op here - it does not substitute object-like macros - and `--aggressive-inlining` makes no difference to the final size. |
+| `cl.exe`, Compo | `/O1 /Os /Oy- /Ob0 /Zl /GS- /TC /DWIN32 /DCOMPO` | Optimize for size, no CRT, no stack cookies. `/Oy-` keeps a frame pointer, which makes each of the audio code's many float spills one byte shorter (-25 bytes), and `/Ob0` stops the inlining of the small audio helpers (-37 bytes); together they are -75. `/Gy` makes no difference, `/Gy /Gw` is 10 bytes worse, and `/Gr`, `/Gv` and `/Oi-` change nothing. `/arch:IA32` is *not* usable as is: x87 float-to-int conversion emits a call to a CRT helper that `/NODEFAULTLIB` cannot resolve, and with a `fisttp` stub for `_ftol2_sse` it still came out 50 bytes larger. |
+| Shader Minifier | `--format text --preserve-externals --field-names stpq` | Uniform and interface-block names are looked up by name from C, so they must survive. `--field-names stpq` compresses 5 bytes better than the default (`rgba` is 1 byte better, `xyzw` equal) and renders the same frames. `--preprocess` is a no-op here - it does not substitute object-like macros - and `--aggressive-inlining` and `--no-sequence` make no difference to the final size; `--move-declarations` is 31 bytes worse. |
 | Crinkler | `/COMPMODE:VERYSLOW /TINYHEADER /TINYIMPORT /ORDERTRIES:10000` | `/TINYHEADER` and `/TINYIMPORT` together are worth about 100 bytes. `/UNSAFEIMPORT` adds nothing on top of `/TINYIMPORT`. `/ORDERTRIES` plateaus at 10000 - higher values cost build time without shrinking further - and `/HASHTRIES` does not help. |
 
 `/TINYHEADER` and `/TINYIMPORT` trade loader robustness for size, so any change

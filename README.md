@@ -89,6 +89,8 @@ Add `-MinifyShaders` to the Debug build to compile the same minified shader text
 .\build.ps1 -Configuration Debug -MinifyShaders
 ```
 
+Add `-Optimize` to the Debug build to compile with the Compo optimization flags, so the generated `ocean.wav` is exactly what the Compo build plays; compare it with `cmp` against one built from an earlier commit to prove that a size change left the sound alone.
+
 `-shot` is reproducible, which makes it the right option for comparing a change; `-live` exercises the real timing path, with the sound's position as the clock, that `-shot` bypasses. `-width`/`-height` check the two resolutions TRSAC requires without changing display mode. `-steps<k>` runs k simulation steps per rendered frame, which reaches a late state quickly when tuning and produces byte-identical output to running k times as many frames. These options are compiled out of the Compo build.
 
 The Compo build runs borderless fullscreen at the current desktop resolution, and is resolution-independent. TRSAC asks for a 1920x1080 and a 1280x720 version of the exe, so `-Release` also builds `plankton_1920x1080.exe` and `plankton_1280x720.exe`, which fix the window size at build time. A single one can be built with `.\build.ps1 -Resolution 1280x720`; it goes to `out\Compo-1280x720\`.
