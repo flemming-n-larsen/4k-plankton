@@ -217,6 +217,19 @@ one so the harness window stays interactive. The visible cost is that the close
 button does nothing and Windows may mark the window unresponsive, which is
 standard for a compo binary.
 
+The Compo window is a borderless `WS_POPUP` the size of the screen, created with
+`WS_EX_TOPMOST` so the taskbar cannot sit over it, and the cursor is hidden with one
+`ShowCursor(0)` call, since the arrow would otherwise stay on top of the picture for the
+whole run. Together they cost 9 bytes (3989 to 3998). This is borderless fullscreen, not
+exclusive fullscreen: switching the display mode with `ChangeDisplaySettings` was
+rejected earlier for the risk of a forced mode change failing or flickering on the
+compo machine, and it would cost more bytes. Checked on the 2560x1440 desktop: cursor
+hidden, window topmost and foreground, rectangle 0,0 2560x1440. A screen grab through GDI
+returns black for this window, so it cannot be used to judge the result. The Debug build
+stays an ordinary window with a title bar and a visible cursor; to see it the way Compo
+does, start it with `-width<w> -height<h>` set to the desktop size, which gives a
+borderless popup.
+
 There is likewise no teardown. `ExitProcess` releases the render context, the
 device context and the sound, so calling `wglMakeCurrent`, `wglDeleteContext`
 and `ReleaseDC` by hand would only add code and import entries.

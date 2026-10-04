@@ -297,16 +297,21 @@ static int Run(void) {
     // the desktop's, unless the build fixes it with COMPO_WIDTH/COMPO_HEIGHT
     // (the per-resolution compo executables).
 #ifdef COMPO_WIDTH
-    window = CreateWindowExA(0, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
+    window = CreateWindowExA(WS_EX_TOPMOST, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
                              width = COMPO_WIDTH, height = COMPO_HEIGHT, 0, 0, 0, 0);
 #else
-    window = CreateWindowExA(0, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
+    window = CreateWindowExA(WS_EX_TOPMOST, "static", 0, WS_POPUP | WS_VISIBLE, 0, 0,
                              width = GetSystemMetrics(SM_CXSCREEN), height = GetSystemMetrics(SM_CYSCREEN), 0, 0, 0, 0);
 #endif
 #else
     window = CreateWindowExA(0, "static", "in4k particles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, (GetSystemMetrics(SM_CXSCREEN) - 1280) / 2, (GetSystemMetrics(SM_CYSCREEN) - 720) / 2, 1280, 720, 0, 0, 0, 0);
 #endif
     if (!window) return 2;
+#ifdef COMPO
+    // The window covers the whole screen, so the arrow would sit on top of the
+    // picture for the full run.
+    ShowCursor(0);
+#endif
     device_context = GetDC(window); pixel_format.nSize = sizeof(pixel_format); pixel_format.nVersion = 1;
     pixel_format.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
     pixel_format.iPixelType = PFD_TYPE_RGBA; pixel_format.cColorBits = 32; pixel_format.iLayerType = PFD_MAIN_PLANE;
