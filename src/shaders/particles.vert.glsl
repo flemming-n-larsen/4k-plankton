@@ -94,7 +94,7 @@ void main() {
     // The opening is a dive: the camera starts 1.8 units further out and swims in to
     // the swarm over the first ten seconds, so the intro starts on the whole
     // creature cloud and ends the dive among the colonies.
-    vec3 offset = particle.xyz - direction * (.5 + .92 * reveal + 1.8 * (1. - smoothstep(0., 10., t)));
+    vec3 offset = particle.xyz - direction * (.5 + .92 * reveal - .2 * smoothstep(38., 56., t) + 1.8 * (1. - smoothstep(0., 10., t)));
     vec3 view = vec3(dot(offset, vec3(ca, 0., -sa)),
                      dot(offset, vec3(-sa * se, ce, -ca * se)),
                      -dot(offset, direction));

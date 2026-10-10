@@ -71,10 +71,10 @@ vec2 StrokePoint(int stroke, float u, float jitter) {
     // directions and pinches into a bowtie instead of a flowing diagonal.
     if (stroke == 8) {
         float a = .2618 + 4.7124 * u;
-        return vec2(2.68, .75) + (.25 + jitter) * vec2(cos(a), sin(a));                         // S: upper 3/4-circle, bulging left
+        return vec2(2.6, .75) + (.25 + jitter) * vec2(cos(a), sin(a));                         // S: upper 3/4-circle, bulging left
     }
     float a = 4.7124 * u - 2.8798;
-    return vec2(2.68, .25) + (.25 + jitter) * vec2(cos(a), sin(a));                             // S: lower 3/4-circle, bulging right
+    return vec2(2.6, .25) + (.25 + jitter) * vec2(cos(a), sin(a));                             // S: lower 3/4-circle, bulging right
 }
 
 // World-space target for particle index i: picks one of the 10 strokes and a
@@ -93,7 +93,7 @@ vec3 LetterTarget(float i) {
     // .8: scaled up together with the camera dolly-in in particles.vert.glsl
     // so the finished word fills as much of the frame as its wide, 4-letter
     // aspect ratio allows without clipping horizontally.
-    return vec3((local.x - 1.465) * .8, (local.y - .5) * .8, sqrt(1. - across * across) * (hash(i * 4.1 + 6.) * 2. - 1.) * .1);
+    return vec3((local.x - 1.412) * .8, (local.y - .5) * .8, sqrt(1. - across * across) * (hash(i * 4.1 + 6.) * 2. - 1.) * .1);
 }
 
 // World-space target on a rubber duck seen from the side, facing left. A filled
@@ -113,7 +113,7 @@ vec3 DuckTarget(float i, float type) {
         p = vec2(-.4, .55) + a * vec2(-.38, -.17) + b * vec2(0., -.3);
     } else if (type == 1.) {
         p = eye + direction * (.06 + .06 * a);
-        z = .25;
+        z = .08;
     } else {
         direction *= sqrt(hash(i * 3.1 + 2.));
         z = sqrt(1. - dot(direction, direction)) * (hash(i * 5.3 + 1.) * 2. - 1.) * .3;
