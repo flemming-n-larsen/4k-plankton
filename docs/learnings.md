@@ -42,6 +42,17 @@ proved to have left the sound alone.
 | The five one-pole filters through one `Lowpass` helper | 3774 to 3774 | yes, for readability; sound identical |
 | Two foam filter stages instead of three | 3774 to 3764 | no; the foam gets 5% different and brighter for 10 bytes |
 
+## Crinkler `/TRUNCATEFLOATS` breaks the sound
+
+`/TRUNCATEFLOATS:bits` rounds every float constant it finds, which compresses well:
+4031 to 3994 bytes at 16 bits, 3977 at 12, 3966 at 10 and 3949 at 8. At 12 bits the
+sound was worse and had a constant howling tone, so it is not used. It cannot be limited
+to the constants that are safe to round, and the sound has several that are not: the
+slow decay of the struck tone, the oscillator steps and the filter coefficients all sit
+close to values where a rounding error is audible. Nothing in the picture was checked,
+since the sound had already ruled it out. The Debug `-Optimize` build cannot show this,
+as it does not truncate; only listening to the Compo build does.
+
 ## Crinkler
 
 - **`/TINYHEADER` was a loss on both counts.** The docs said `/TINYHEADER` and
