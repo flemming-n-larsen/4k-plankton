@@ -5,7 +5,9 @@ layout(location = 1) uniform vec2 r;
 
 // Flat vec4 array, matching particles.comp.glsl: particle n's position is
 // v[n * 2]. The velocity at v[n * 2 + 1] is not read here.
-layout(std430, binding = 0) buffer P {
+// No layout qualifier: the binding defaults to 0, and the layout of a vec4
+// array is the same in every packing.
+buffer P {
     vec4 v[];
 };
 

@@ -23,7 +23,9 @@ layout(location = 1) uniform float d;
 // A flat vec4 array rather than an array of two-vec4 structs: the struct and
 // the field names survive minification (--preserve-externals protects the
 // block), so particle n's position is v[n * 2] and its velocity v[n * 2 + 1].
-layout(std430, binding = 0) buffer P {
+// No layout qualifier: the binding defaults to 0, and the layout of a vec4
+// array is the same in every packing.
+buffer P {
     vec4 v[];
 };
 
