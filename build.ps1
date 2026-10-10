@@ -15,7 +15,8 @@ param(
     # Compo build only: also copies the verified executable to release/ so the
     # shippable binary can be committed and carried to the party. Without
     # -Resolution it builds all three entries: plankton.exe (desktop resolution)
-    # and the two fixed-resolution executables.
+    # and the two fixed-resolution executables, and then zips everything in
+    # release/ into release/plankton.zip.
     [switch]$Release
 )
 
@@ -161,5 +162,11 @@ if ($Release) {
     Copy-Item -LiteralPath $executable -Destination $releaseDirectory -Force
     Write-Host "Released $(Join-Path $releaseDirectory $exeName)"
     if (!$Resolution) { foreach ($size in '1920x1080', '1280x720') { & $PSCommandPath -Release -Resolution $size } }
+    # The upload archive: every file in release/ except an older archive of itself.
+    if (!$Resolution) {
+        $archive = Join-Path $releaseDirectory 'plankton.zip'
+        Compress-Archive -Path (Get-ChildItem $releaseDirectory -Exclude '*.zip') -DestinationPath $archive -Force
+        Write-Host "Archived $archive"
+    }
 }
 if ($Run) { Start-Process -FilePath $executable }

@@ -48,7 +48,7 @@ References: [Build C/C++ on the command line](https://learn.microsoft.com/en-us/
 
 - `-MinifyShaders` runs the Compo shader minification in a Debug build, so shader changes can be compared frame by frame with the capture options.
 - `-Optimize` compiles Debug with the Compo flags instead of `/Od`, so `ocean.wav` is exactly what Compo plays. `cmp` it against one built from another commit to prove a size change did not touch the sound.
-- `-Release` builds all three Compo executables and copies them to `release/`.
+- `-Release` builds all three Compo executables, copies them to `release/`, and zips everything in `release/` (executables and `plankton.nfo`) into `release/plankton.zip` for upload.
 
 The script locates and initialises the MSVC environment, runs the shader minifier, compiles with `cl.exe`, links with Crinkler, and writes the executable, Crinkler report, toolchain report and size report to ignored directories under `out/`. Compiler and linker commands stay visible in the output. Humans and coding agents use the same commands.
 
