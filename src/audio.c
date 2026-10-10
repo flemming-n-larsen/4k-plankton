@@ -161,6 +161,11 @@ static float __vectorcall Smoothstep(int edge0, int edge1, float x) {
     return f * f * (3.f - 2.f * f);
 }
 
+// A swell: up between the first two edges, down between the last two.
+static float __vectorcall Bump(int up0, int up1, int down0, int down1, float x) {
+    return Smoothstep(up0, up1, x) * (1.f - Smoothstep(down0, down1, x));
+}
+
 // Eases between two waypoints spaced period samples apart, smoothstepped.
 static float __vectorcall Waypoint(int slot, int period) {
     if (waypoint_counter[slot] >= period) {
@@ -209,7 +214,7 @@ static float __vectorcall Waypoint(int slot, int period) {
 // buffer is one shot rather than a loop, it needs no crossfade at all.
 static short pcm[RUN_SAMPLES];
 
-static void* GenerateOcean(void) {
+static void GenerateOcean(void) {
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, foam3 = 0.f, previous_white = 0.f;
     float accent = 0.f, accent_ratio = 1.f;
@@ -231,18 +236,18 @@ static void* GenerateOcean(void) {
         float arc = .3f + .7f * Smoothstep(12, 60, half);
         // The small swell under the wave of light at 17..21, so the free-swim
         // stretch has an event the sound answers as well as the picture.
-        float surge = Smoothstep(62, 70, half) * (1.f - Smoothstep(74, 90, half))
-                    + .5f * Smoothstep(34, 38, half) * (1.f - Smoothstep(39, 45, half));
+        float surge = Bump(62, 70, 74, 90, half)
+                    + .5f * Bump(34, 38, 39, 45, half);
         // A hush in the water around 18 s, a moment before the wave of light
         // arrives, which the picture shows as the dip in its brightness.
-        float hush = Smoothstep(33, 36, half) * (1.f - Smoothstep(36, 39, half));
+        float hush = Bump(33, 36, 36, 39, half);
         float macro = (arc + .6f * surge) * (1.f - .5f * hush);
         // A few bubbles belong in the water throughout the run. Pack them
         // around the two visible transitions: formation at 30..36 and the
         // logo's fade-out at 48..56. These are broad windows so the sound
         // does not call attention to one arbitrary sample boundary.
-        float logo_burst = Smoothstep(58, 62, half) * (1.f - Smoothstep(70, 74, half))
-                         + Smoothstep(94, 98, half) * (1.f - Smoothstep(108, 112, half));
+        float logo_burst = Bump(58, 62, 70, 74, half)
+                         + Bump(94, 98, 108, 112, half);
         // Guarantee that the assembly has a live chain even if the previous
         // random chain happened to finish just before the logo starts.
         if (half >= 60.f && half < 62.f && !logo_chain_started) {
@@ -276,7 +281,7 @@ static void* GenerateOcean(void) {
         // The sub is what gives the reveal weight on a hall system, rather
         // than letting it arrive as nothing but more foam.
         tonal += Oscillator(3, pitch[6]) * .25f
-               * Smoothstep(64, 70, half) * (1.f - Smoothstep(86, 106, half));
+               * Bump(64, 70, 86, 106, half);
         // The motif, a struck tone every .55 s. The last of the three
         // statements is the one that follows the left-to-right assembly of
         // the letters in particles.comp.glsl. Each tone is decayed by a
@@ -346,14 +351,14 @@ static void* GenerateOcean(void) {
         wet = sample / (1.f + (sample < 0.f ? -sample : sample)) * .78f + tonal + bubble * .08f;
         pcm[i] = (short)(int)(wet * (1.f - wet * wet * (1.f / 3.f)) * fade * 25000.f);
     }
-    return pcm;
 }
 
 // An initialised static rather than a local filled in field by field.
 static const WaveFormat format = { 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16, 0 };
 
 void AudioStart(void) {
-    header.data = (char*)GenerateOcean();
+    GenerateOcean();
+    header.data = (char*)pcm;
     header.length = RUN_SAMPLES * 2;
 #ifdef DEBUG
     fallback_ticks = GetTickCount();
