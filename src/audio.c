@@ -248,10 +248,10 @@ static void GenerateOcean(void) {
         float macro = (arc + .6f * surge) * (1.f - .5f * hush);
         // A few bubbles belong in the water throughout the run. Pack them
         // around the two visible transitions: formation at 30..36 and the
-        // logo's fade-out at 48..56. These are broad windows so the sound
+        // logo's release at 44..53. These are broad windows so the sound
         // does not call attention to one arbitrary sample boundary.
         float logo_burst = Bump(58, 62, 70, 74, half)
-                         + Bump(94, 98, 108, 112, half);
+                         + Bump(88, 92, 100, 106, half);
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
         float fade = 1.f - Smoothstep(108, 124, half);
