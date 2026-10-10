@@ -293,7 +293,9 @@ static void GenerateOcean(void) {
             }
         }
         tonal += Oscillator(4, pitch[7] * accent_ratio) * accent * .18f;
-        accent *= .99993f;
+        // A power of two, so that no rounding of the constant can change it: this
+        // factor is within 1e-4 of 1, and /TRUNCATEFLOATS rounded .99993 to 1.
+        accent -= accent * (1.f / 16384);
 
         // Reference WAV analysis: sine sweeps rise from about 140..200 Hz
         // toward 400..600 Hz over roughly 150 ms. A rounded attack and

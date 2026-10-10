@@ -149,7 +149,7 @@ if ($Configuration -eq 'Debug') {
     Invoke-Native 'link.exe' (@('/nologo', '/subsystem:windows', '/entry:WinMainCRTStartup', '/nodefaultlib', "/out:$executable") + $objects + $libraries)
 } else {
     $report = Join-Path $outputDirectory 'crinkler-report.html'
-    Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', '/SATURATE', '/TINYIMPORT', '/ORDERTRIES:10000', "/OUT:$executable", "/REPORT:$report") + $objects + $libraries)
+    Invoke-Native $toolchain.crinkler (@('/CRINKLER', '/SUBSYSTEM:WINDOWS', '/ENTRY:WinMainCRTStartup', '/NODEFAULTLIB', '/COMPMODE:VERYSLOW', '/SATURATE', '/TRUNCATEFLOATS:16', '/TINYIMPORT', '/ORDERTRIES:10000', "/OUT:$executable", "/REPORT:$report") + $objects + $libraries)
     $bytes = (Get-Item -LiteralPath $executable).Length
     [ordered]@{ executable = $exeName; bytes = $bytes; limit = 4096; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $executable).Hash } | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $outputDirectory 'size.json')
     Write-Host "Compo size: $bytes / 4096 bytes"; if ($bytes -gt 4096) { Fail "Compo executable exceeds the 4096-byte limit by $($bytes - 4096) bytes." }

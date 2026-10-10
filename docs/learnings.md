@@ -42,16 +42,27 @@ proved to have left the sound alone.
 | The five one-pole filters through one `Lowpass` helper | 3774 to 3774 | yes, for readability; sound identical |
 | Two foam filter stages instead of three | 3774 to 3764 | no; the foam gets 5% different and brighter for 10 bytes |
 
-## Crinkler `/TRUNCATEFLOATS` breaks the sound
+## Crinkler `/TRUNCATEFLOATS` works at 16, and the number counts the whole float
 
-`/TRUNCATEFLOATS:bits` rounds every float constant it finds, which compresses well:
-4031 to 3994 bytes at 16 bits, 3977 at 12, 3966 at 10 and 3949 at 8. At 12 bits the
-sound was worse and had a constant howling tone, so it is not used. It cannot be limited to the constants that are safe to round. The cause of the howl
-was not tracked down; the constants in the audio code that sit close to 1 or are
-compared with small steps (the slow decay of the struck tone, the oscillator steps, the
-filter coefficients) are the first suspects. Nothing in the picture was checked, since
-the sound had already ruled it out. The Debug `-Optimize` build cannot show this,
-as it does not truncate; only listening to the Compo build does.
+`/TRUNCATEFLOATS:bits` rounds the float constants the compiler writes as `__real@...`
+literals, which compresses well: 4031 bytes without it, 4017 at 20 bits, 4006 at 18,
+3995 at 16, 3990 at 14, and 3977 at 12. It leaves tables (`static const float pitch[]`),
+byte tables, strings and the shader text alone; this was checked by dumping the unpacked
+program from memory and comparing it with the build without the option.
+
+**The number is the bits kept of the whole float, sign and exponent included.** A float has
+9 of those before its mantissa, so 12 keeps 3 mantissa bits, an error of up to 12%, and 16
+keeps 7, up to 0.8%. At 12 the sound had a constant howling tone and was worse: `.99993`,
+the decay of the struck tone, was rounded to exactly 1, so the tone never died, and every
+literal in the filters and the clock was off by percent. A constant that is a hair from 1
+cannot survive the option at any useful width, so it is written as a power of two instead
+(`accent -= accent * (1.f / 16384)`, which is also 14% slower than before). The other
+literals are only off by up to 0.8%, which moves the filter corners and the clock a hair
+and keeps the pitches, since those sit in a table.
+
+Judge a width by running the whole Compo build and listening: the Debug `-Optimize` build
+does not truncate, so its `ocean.wav` cannot show it. Do not use a value below 16 without
+listening first.
 
 ## Crinkler
 
