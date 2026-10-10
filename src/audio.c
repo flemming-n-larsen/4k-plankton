@@ -92,10 +92,11 @@ static const unsigned char chord[5][3] = {
 // The motif: four struck tones, ratios above D5, D, F, A and then D an octave
 // up, an arpeggio of the key. It is first heard twice as a question that stops
 // on F, softly at 12 s and louder under the wave of light at 18.6 s, and then
-// answered, resolving on the high D, as the four letters of the word lock.
+// answered, resolving on the high D, as the four letters of the word lock. A
+// fourth statement, softer, plays as the duck forms and resolves the same way.
 // Start times are in fifths of a second.
 static const float motif_ratio[4] = { 1.f, 1.1892f, 1.4983f, 2.f };
-static const unsigned char motif_start[3] = { 60, 93, 176 };
+static const unsigned char motif_start[4] = { 60, 93, 176, 235 };
 
 static float osc_y[VOICES];
 static float osc_z[VOICES] = { 1.f, 1.f, 1.f, 1.f, 1.f, 1.f };
@@ -285,10 +286,10 @@ static void GenerateOcean(void) {
         // the letters in particles.comp.glsl. Each tone is decayed by a
         // repeated multiply: an exponential with a 0.65 s time constant and no
         // expf.
-        for (voice = 0; voice < 3; voice++) {
+        for (voice = 0; voice < 4; voice++) {
             int hit = i - motif_start[voice] * (SAMPLE_RATE / 5), gap = SAMPLE_RATE * 55 / 100, note = hit / gap;
             if (hit >= 0 && hit % gap == 0 && note < 4) {
-                accent = .3f + .35f * voice;
+                accent = voice > 2 ? .5f : .3f + .35f * voice;
                 accent_ratio = motif_ratio[note == 3 && voice < 2 ? 1 : note];
             }
         }
