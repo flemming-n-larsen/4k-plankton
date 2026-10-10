@@ -101,7 +101,7 @@ vec3 LetterTarget(float i) {
 // they cover it, and as a tangle when they trace it. The gold species fills the
 // body, the head and the tail, each a random spot in a unit disc stretched and
 // moved into place. The beak is a triangle of a sixth of the red species, and a
-// slice of the cyan one makes a ring for the eye, packed tightly enough to
+// sixth of the cyan one makes a ring for the eye, packed tightly enough to
 // burn out to white.
 // The gold keeps clear of the eye, which leaves the pupil dark.
 vec3 DuckTarget(float i, float type) {
@@ -229,7 +229,7 @@ void main() {
     // The gold species and slices of the red and cyan ones gather into the duck as the word comes apart,
     // and are let go again from 53 to 57 seconds, so the duck dissolves back into
     // the swarm the way the word did.
-    if (self.w == 5. || self.w == 4. && i % 6u == 0u || self.w == 1. && i % 16u == 0u) force = mix(force, (DuckTarget(float(i), self.w) - self.xyz) * 60., smoothstep(45., 48., t) * (1. - smoothstep(53., 57., t)));
+    if (self.w == 5. || (self.w == 4. || self.w == 1.) && i % 6u == 0u) force = mix(force, (DuckTarget(float(i), self.w) - self.xyz) * 60., smoothstep(45., 48., t) * (1. - smoothstep(53., 57., t)));
 
     vec3 velocity = v[b + 1].xyz + force * d;
     v[b + 1] = vec4(velocity * exp(-17. * d), 0.);

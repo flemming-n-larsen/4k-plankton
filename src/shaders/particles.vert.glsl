@@ -189,7 +189,7 @@ void main() {
     // the cells swimming past do not cover it.
     float duck = smoothstep(45., 48., t) * (1. - smoothstep(53., 57., t));
     if (particle.w == 5.) c *= 1. + 2.5 * duck;
-    else if (!(particle.w == 4. && gl_VertexID % 6 == 0 || particle.w == 1. && gl_VertexID % 16 == 0)) c *= 1. - .7 * duck;
+    else if (!((particle.w == 4. || particle.w == 1.) && gl_VertexID % 6 == 0)) c *= 1. - .7 * duck;
     // Fades in from black, then back to black a few seconds after NUTS is fully
     // formed, ending the intro on the held word rather than an abrupt cut. Must
     // match the copy in background.frag.glsl.
