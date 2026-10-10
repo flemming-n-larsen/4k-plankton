@@ -216,7 +216,7 @@ static short pcm[RUN_SAMPLES];
 
 static void GenerateOcean(void) {
     int i;
-    float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, foam3 = 0.f, previous_white = 0.f;
+    float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, previous_white = 0.f;
     float accent = 0.f, accent_ratio = 1.f;
     int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
     float bubble_frequency = 0.f;
@@ -259,7 +259,6 @@ static void GenerateOcean(void) {
         previous_white = white2;
         foam1 += (foam_raw - foam1) * .14f;
         foam2 += (foam1 - foam2) * .14f;
-        foam3 += (foam2 - foam3) * .14f;
 
         // The chord section, on the same clock as the macro envelope above.
         section = half < 36.f ? 0 : half < 48.f ? 1
@@ -328,7 +327,7 @@ static void GenerateOcean(void) {
         // The surge opens the foam further than the level alone would, so the
         // reveal arrives as a wash of white water instead of just louder surf.
         sample = (surf2 * (.25f + .7f * shaped)
-               + foam3 * (.2f + .8f * shaped * shaped) * (.52f + 2.f * texture) * (1.f + 1.4f * surge)) * macro;
+               + foam2 * (.2f + .8f * shaped * shaped) * (.52f + 2.f * texture) * (1.f + 1.4f * surge)) * macro;
         // Soft-knee saturation instead of a hard clamp: maps all of R into
         // (-1,1) smoothly, so loud swells round off instead of clipping. The
         // ambience gets its own knee before the tonal layer is added, so the
