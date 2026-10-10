@@ -70,7 +70,7 @@ To produce the executable that is committed and brought to the party, build with
 
 `release\info.txt` is the information file the compo requires with the entry. It is maintained by hand, so update it if the run length, requirements, or credits change.
 
-Press Escape to exit either build. The intro uses the predefined `"static"` window class and runs no message pump in the Compo build, so the window's close button does nothing - Escape, or letting the run finish, is how it ends.
+Press Escape to exit either build. The intro uses the predefined `"static"` window class and in the Compo build only takes one message a frame (so Windows does not mark it as hung) without acting on any, so the window's close button does nothing - Escape, or letting the run finish, is how it ends.
 
 ## Inspecting a Debug run
 

@@ -84,11 +84,12 @@ Compiler and linker commands should remain visible in build output so size regre
 | --- | --- | --- |
 | `cl.exe`, Compo | `/O1 /Os /Oy- /Ob0 /Zl /GS- /TC /DWIN32 /DCOMPO` | Optimize for size, no CRT, no stack cookies. `/Oy-` keeps a frame pointer, which makes each of the audio code's many float spills one byte shorter (-25 bytes), and `/Ob0` stops the inlining of the small audio helpers (-37 bytes); together they are -75. `/Gy` makes no difference, `/Gy /Gw` is 10 bytes worse, and `/Gr`, `/Gv` and `/Oi-` change nothing. `/arch:IA32` is *not* usable as is: x87 float-to-int conversion emits a call to a CRT helper that `/NODEFAULTLIB` cannot resolve, and with a `fisttp` stub for `_ftol2_sse` it still came out 50 bytes larger. |
 | Shader Minifier | `--format text --preserve-externals --field-names stpq` | Uniform and interface-block names are looked up by name from C, so they must survive. `--field-names stpq` compresses 5 bytes better than the default (`rgba` is 1 byte better, `xyzw` equal) and renders the same frames. `--preprocess` is a no-op here - it does not substitute object-like macros - and `--aggressive-inlining` and `--no-sequence` make no difference to the final size; `--move-declarations` is 31 bytes worse. |
-| Crinkler | `/COMPMODE:VERYSLOW /TINYHEADER /TINYIMPORT /ORDERTRIES:10000` | `/TINYHEADER` and `/TINYIMPORT` together are worth about 100 bytes. `/UNSAFEIMPORT` adds nothing on top of `/TINYIMPORT`. `/ORDERTRIES` plateaus at 10000 - higher values cost build time without shrinking further - and `/HASHTRIES` does not help. |
+| Crinkler | `/COMPMODE:VERYSLOW /SATURATE /TINYIMPORT /ORDERTRIES:10000` | `/TINYIMPORT` loads the DLLs and functions by hash. `/TINYHEADER` is not used: measured on the same objects it was 20 bytes *larger* than the normal header with `/COMPMODE:VERYSLOW` (4020 against 4000; it ignores `/COMPMODE` and `/SATURATE`), and its slow decompressor kept the screen black for about 11.5 seconds before the window opened, against 0.3 seconds without it. `/SATURATE` saves 2 bytes with the normal header. `/UNSAFEIMPORT` adds nothing on top of `/TINYIMPORT`. `/ORDERTRIES` plateaus at 10000 - higher values cost build time without shrinking further - and `/HASHTRIES` does not help. |
 
-`/TINYHEADER` and `/TINYIMPORT` trade loader robustness for size, so any change
-to them must be validated by running the Compo executable, rather than by building
-it. `/ORDERTRIES:10000` makes a Compo link take roughly 20 seconds.
+`/TINYIMPORT` trades loader robustness for size, and the header decides how long
+the screen stays black before the window opens, so any change to the Crinkler
+options must be validated by running the Compo executable and timing how long the
+window takes to appear, rather than by building it. `/ORDERTRIES:10000` makes a Compo link take roughly 20 seconds.
 
 ## Why not CMake?
 

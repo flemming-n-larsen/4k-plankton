@@ -219,10 +219,14 @@ The window uses the predefined `"static"` class instead of one registered by
 the intro. That class already supplies a window procedure, so there is no
 `RegisterClassA` call, no class name string, no instance handle, and no window
 procedure of our own. The intro never acts on a message - it ends on Escape or
-on its own clock - so the Compo build runs no message pump at all; Debug keeps
-one so the harness window stays interactive. The visible cost is that the close
-button does nothing and Windows may mark the window unresponsive, which is
-standard for a compo binary.
+on its own clock - so the Compo build only takes one message a frame with a
+single `PeekMessageA` and dispatches nothing; Debug runs a full pump so the
+harness window stays interactive. The one message a frame is not optional: a
+window whose thread takes no messages for five seconds is marked as hung, and
+Windows may then put a frozen "Not responding" copy over the picture. Without it
+`IsHungAppWindow` reported the Compo window hung within seconds; with it the
+window responds for the whole run, for 13 bytes (3881 to 3894). The close button
+still does nothing.
 
 The Compo window is a borderless `WS_POPUP` the size of the screen, created with
 `WS_EX_TOPMOST` so the taskbar cannot sit over it, and the cursor is hidden with one
@@ -241,6 +245,16 @@ There is likewise no teardown. `ExitProcess` releases the render context, the
 device context and the sound, so calling `wglMakeCurrent`, `wglDeleteContext`
 and `ReleaseDC` by hand would only add code and import entries.
 
+The Compo build checks no errors while it sets up: without a window or an
+OpenGL 4.3 context there is nothing to show, so the checks would only cost
+bytes. Debug keeps them, with the exit codes. In Compo the main function is also
+the entry point itself and ends in `ExitProcess(0)`, rather than a
+`WinMainCRTStartup` that calls it; the two together saved 33 bytes (3914 to
+3881). The `PIXELFORMATDESCRIPTOR` is an initialised `static` rather than a
+local filled in field by field: mostly-zero data costs almost nothing, the
+stores cost 45 bytes (3959 to 3914). Folding `LoadOpenGl`, which is called
+once, into the main function was tried and was 3 bytes larger.
+
 The framebuffer size and the resolution uniforms are resolved once before the
 main loop instead of every frame: a `WS_POPUP` window's client area is the whole
 window, so the screen metrics passed to `CreateWindowExA` are also the
@@ -248,6 +262,13 @@ framebuffer size, and no `GetClientRect` is needed in the Compo build. There is
 no `glViewport` call at all - the viewport already covers the whole window when
 the context is first made current, and neither the window nor the resolution
 ever changes.
+
+No uniform is looked up by name. Every shader fixes its locations with
+`layout(location = N)`: `t` is 0 in all three programs, `d` (compute) and `r`
+(vertex and background) are 1, so `glGetUniformLocation`, its name in the
+function table and the uniform-name strings are gone (4000 to 3959 bytes). The
+background shader needed `#version 430` for this, and with it an
+`out vec4 colour` in place of `gl_FragColor`.
 
 ### Simulation and rendering
 
@@ -642,11 +663,12 @@ a vertical gradient from deep navy to lit teal, a moving caustic ridge pattern,
 and god rays converging on a sun point above the top edge, all built from a
 handful of `sin`/`atan` terms in normalized `[0,1]` screen space instead of
 any texture or 3D geometry - this costs about 280 bytes for the whole effect.
-Blending is disabled while it draws, since it covers every pixel of the
-viewport and would otherwise accumulate additively over whatever was left in
-the back buffer from a previous frame; blending is re-enabled for the points
-drawn on top. This also removes the need for `glClear` - the background
-already overwrites every pixel.
+It must replace what the previous frame left in the back buffer, while the
+points drawn on top must add. Rather than switching blending off and on around
+it every frame, the blend function is `GL_ONE, GL_SRC_ALPHA`, set once: the
+destination is scaled by the source's alpha, the background writes alpha 0 and
+so replaces, the points write alpha 1 and add (3893 to 3886 bytes). This also
+removes the need for `glClear` - the background already overwrites every pixel.
 
 The program is `background.frag.glsl` alone, with **no vertex stage**: in a
 compatibility profile a program with only a fragment shader runs the
@@ -712,8 +734,8 @@ colour in the vertex shader instead of passed to the fragment shader as a
 second varying. A point sprite has a single vertex, so one interpolated colour
 is exactly what a separate colour and fade would have multiplied out to. The
 fragment shader likewise clamps its sprite falloff at zero instead of
-`discard`ing the corner fragments: blending is `GL_ONE, GL_ONE`, so a black
-fragment adds nothing and the image is the same without the branch.
+`discard`ing the corner fragments: a point sprite's colour is added (its alpha
+of 1 keeps the destination), so a black fragment adds nothing and the image is the same without the branch.
 
 ### Debug-only tooling
 
@@ -735,9 +757,9 @@ grab, by reading the back buffer in-process and writing `shot.bmp`:
   picture lags (`sim_minus_audio`, always a little negative: one simulation step plus the time
   to draw it, about 20 to 30 ms). The sound's position is the picture's clock, so there is no
   drift to see. Crinkler's unpack time is not part of this: it happens before `Run()` starts.
-  The unpack itself is large (about 11 seconds on the development machine before the window
-  appears) and depends on the CPU. It is accepted: the size limit is the priority and the
-  heavy compression modes are what make the intro fit.
+  With the normal Crinkler header the window appears after about 0.3 seconds on the
+  development machine. With `/TINYHEADER` it took about 11.5 seconds, and that header was
+  also 22 bytes larger (see `docs/toolchain.md`).
 - `-steps<k>` runs k simulation steps per rendered frame. Rendering never feeds
   back into the simulation, so this reaches a late state in a fraction of the
   wall-clock time while producing byte-identical output, since the simulation

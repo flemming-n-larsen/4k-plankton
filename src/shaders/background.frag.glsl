@@ -1,5 +1,9 @@
-uniform float t;
-uniform vec2 r;
+#version 430
+
+layout(location = 0) uniform float t;
+layout(location = 1) uniform vec2 r;
+
+out vec4 colour;
 
 void main() {
     // Fades the whole scene in from black at the start and back out a few
@@ -30,11 +34,11 @@ void main() {
 
     // Depth gradient, from deep water at the bottom to shallow at the top,
     // written as the deep colour plus the difference rather than a mix().
-    vec3 colour = vec3(.0, .03, .08) + vec3(.05, .32, .37) * lit;
+    vec3 water = vec3(.0, .03, .08) + vec3(.05, .32, .37) * lit;
 
     // Caustic filaments: a sharpened sine ridge, fading out with depth.
     float caustic = pow(abs(sin(q.x * 10. + sin(q.y * 8. + t * .6) * 2.)), 4.);
-    colour += caustic * vec3(.6, 1., .9) * .12 * lit;
+    water += caustic * vec3(.6, 1., .9) * .12 * lit;
 
     // God rays from a sun above the top edge, converging downward. The shaft
     // pattern is one angular frequency, which on its own gives nine identical,
@@ -49,7 +53,7 @@ void main() {
     float angle = atan(sun.x, sun.y);
     float rays = pow(abs(sin(angle * 9. + sin(t * .3) * .4)), 6.)
                * (.55 + .45 * sin(angle * 3.7 - t * .13));
-    colour += rays * vec3(.9, 1., .85) * .55 * lit / (1. + dot(sun, sun) * .6);
+    water += rays * vec3(.9, 1., .85) * .55 * lit / (1. + dot(sun, sun) * .6);
 
     // Rising bubbles: three parallax layers of a hashed cell grid, each
     // scrolling upward. This is what sells the ascent - the light alone says
@@ -84,7 +88,7 @@ void main() {
         bubbles += (smoothstep(radius, radius * .8, d) - smoothstep(radius * .76, radius * .5, d))
                  * max(h - .84, 0.) * 6.;
     }
-    colour += bubbles * vec3(.5, .8, .9) * .15 * (.3 + .7 * rise);
+    water += bubbles * vec3(.5, .8, .9) * .15 * (.3 + .7 * rise);
 
-    gl_FragColor = vec4(colour * (1. - .35 * length(p - .5)) * fade, 1.);
+    colour = vec4(water * (1. - .35 * length(p - .5)) * fade, 0.);
 }

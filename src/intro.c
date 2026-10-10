@@ -43,6 +43,13 @@ typedef int GLsizeiptr;
 // Compatibility profiles leave gl_PointCoord undefined unless point sprites are on.
 #define GL_POINT_SPRITE 0x8861
 
+// Uniform locations, fixed by layout(location = N) in the shaders, so none is
+// looked up by name: t is 0 in all three programs, d (compute) and r (vertex
+// and background) are 1.
+#define UNIFORM_TIME 0
+#define UNIFORM_DELTA 1
+#define UNIFORM_RESOLUTION 1
+
 #include "shaders.h"
 #include "audio.h"
 
@@ -55,7 +62,6 @@ typedef GLuint (APIENTRYP PFNGLCREATEPROGRAMPROC)(void);
 typedef void (APIENTRYP PFNGLATTACHSHADERPROC)(GLuint program, GLuint shader);
 typedef void (APIENTRYP PFNGLLINKPROGRAMPROC)(GLuint program);
 typedef void (APIENTRYP PFNGLUSEPROGRAMPROC)(GLuint program);
-typedef GLint (APIENTRYP PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar* name);
 typedef void (APIENTRYP PFNGLUNIFORM1FPROC)(GLint location, GLfloat value);
 typedef void (APIENTRYP PFNGLUNIFORM2FPROC)(GLint location, GLfloat x, GLfloat y);
 typedef void (APIENTRYP PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);
@@ -74,7 +80,7 @@ typedef void (APIENTRYP PFNGLGETPROGRAMINFOLOGPROC)(GLuint program, GLsizei max_
 // entry point. The order here must match the enum below.
 static const char gl_names[] =
     "glCreateShader\0glShaderSource\0glCompileShader\0glCreateProgram\0glAttachShader\0"
-    "glLinkProgram\0glUseProgram\0glGetUniformLocation\0glUniform1f\0glUniform2f\0"
+    "glLinkProgram\0glUseProgram\0glUniform1f\0glUniform2f\0"
     "glBindBuffer\0glBufferData\0glBindBufferBase\0glDispatchCompute\0glMemoryBarrier\0"
 #ifdef DEBUG
     "glGetShaderiv\0glGetShaderInfoLog\0glGetProgramiv\0glGetProgramInfoLog\0"
@@ -84,7 +90,7 @@ static const char gl_names[] =
 enum {
     GL_FUNCTION_CREATE_SHADER, GL_FUNCTION_SHADER_SOURCE, GL_FUNCTION_COMPILE_SHADER,
     GL_FUNCTION_CREATE_PROGRAM, GL_FUNCTION_ATTACH_SHADER, GL_FUNCTION_LINK_PROGRAM,
-    GL_FUNCTION_USE_PROGRAM, GL_FUNCTION_GET_UNIFORM_LOCATION, GL_FUNCTION_UNIFORM_1F,
+    GL_FUNCTION_USE_PROGRAM, GL_FUNCTION_UNIFORM_1F,
     GL_FUNCTION_UNIFORM_2F, GL_FUNCTION_BIND_BUFFER,
     GL_FUNCTION_BUFFER_DATA, GL_FUNCTION_BIND_BUFFER_BASE, GL_FUNCTION_DISPATCH_COMPUTE,
     GL_FUNCTION_MEMORY_BARRIER,
@@ -104,7 +110,6 @@ static PROC gl_functions[GL_FUNCTION_COUNT];
 #define glAttachShader_ ((PFNGLATTACHSHADERPROC)gl_functions[GL_FUNCTION_ATTACH_SHADER])
 #define glLinkProgram_ ((PFNGLLINKPROGRAMPROC)gl_functions[GL_FUNCTION_LINK_PROGRAM])
 #define glUseProgram_ ((PFNGLUSEPROGRAMPROC)gl_functions[GL_FUNCTION_USE_PROGRAM])
-#define glGetUniformLocation_ ((PFNGLGETUNIFORMLOCATIONPROC)gl_functions[GL_FUNCTION_GET_UNIFORM_LOCATION])
 #define glUniform1f_ ((PFNGLUNIFORM1FPROC)gl_functions[GL_FUNCTION_UNIFORM_1F])
 #define glUniform2f_ ((PFNGLUNIFORM2FPROC)gl_functions[GL_FUNCTION_UNIFORM_2F])
 #define glBindBuffer_ ((PFNGLBINDBUFFERPROC)gl_functions[GL_FUNCTION_BIND_BUFFER])
@@ -219,7 +224,9 @@ static int LoadOpenGl(void) {
     int index;
     for (index = 0; index < GL_FUNCTION_COUNT; index++) {
         gl_functions[index] = wglGetProcAddress(name);
+#ifdef DEBUG
         if (!gl_functions[index]) return 0;
+#endif
         while (*name++) {}
     }
     return 1;
@@ -250,14 +257,25 @@ static void LinkProgram(GLuint program) {
 #endif
 }
 
+// An initialised static rather than a local filled in field by field: the
+// stores cost more than the mostly-zero data. PFD_TYPE_RGBA and PFD_MAIN_PLANE
+// are both 0.
+static PIXELFORMATDESCRIPTOR pixel_format = {
+    sizeof(PIXELFORMATDESCRIPTOR), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER, PFD_TYPE_RGBA, 32
+};
+
+// In the Compo build the main function is itself the entry point and ends the
+// process: a wrapper calling it would cost bytes.
+#ifdef DEBUG
 static int Run(void) {
-    PIXELFORMATDESCRIPTOR pixel_format = {0};
-    HDC device_context; HGLRC render_context; HWND window; int pixel_format_index;
+#else
+void __cdecl WinMainCRTStartup(void) {
+#endif
+    HDC device_context; HWND window; MSG message;
     GLuint simulation, rendering, background;
-    GLint delta_location, simulation_time_location, time_location, background_time_location;
     int width; int height; float now; float sim_time; int sim_steps; int step;
 #ifdef DEBUG
-    RECT client; MSG message;
+    RECT client; HGLRC render_context; int pixel_format_index;
 #endif
 #ifdef DEBUG
     int shot_frames = Option("-shot", 360); int live_seconds = Option("-live", 10); int frame = 0;
@@ -300,19 +318,27 @@ static int Run(void) {
 #else
     window = CreateWindowExA(0, "static", "in4k particles", WS_OVERLAPPEDWINDOW | WS_VISIBLE, (GetSystemMetrics(SM_CXSCREEN) - 1280) / 2, (GetSystemMetrics(SM_CYSCREEN) - 720) / 2, 1280, 720, 0, 0, 0, 0);
 #endif
+#ifdef DEBUG
     if (!window) return 2;
+#endif
 #ifdef COMPO
     // The window covers the whole screen, so the arrow would sit on top of the
     // picture for the full run.
     ShowCursor(0);
 #endif
-    device_context = GetDC(window); pixel_format.nSize = sizeof(pixel_format); pixel_format.nVersion = 1;
-    pixel_format.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-    pixel_format.iPixelType = PFD_TYPE_RGBA; pixel_format.cColorBits = 32; pixel_format.iLayerType = PFD_MAIN_PLANE;
+    device_context = GetDC(window);
+#ifdef DEBUG
     pixel_format_index = ChoosePixelFormat(device_context, &pixel_format);
     if (!pixel_format_index || !SetPixelFormat(device_context, pixel_format_index, &pixel_format)) return 3;
     render_context = wglCreateContext(device_context);
     if (!render_context || !wglMakeCurrent(device_context, render_context) || !LoadOpenGl()) return 4;
+#else
+    // No error checks in the Compo build: without a window or an OpenGL 4.3
+    // context there is nothing to show, and the checks only cost bytes.
+    SetPixelFormat(device_context, ChoosePixelFormat(device_context, &pixel_format), &pixel_format);
+    wglMakeCurrent(device_context, wglCreateContext(device_context));
+    LoadOpenGl();
+#endif
 #ifdef DEBUG
     Report("OpenGL version: ", (const char*)glGetString(GL_VERSION));
 #endif
@@ -330,10 +356,6 @@ static int Run(void) {
     background = glCreateProgram_();
     AttachShader(background, GL_FRAGMENT_SHADER, background_fragment_shader);
     LinkProgram(background);
-    delta_location = glGetUniformLocation_(simulation, "d");
-    simulation_time_location = glGetUniformLocation_(simulation, "t");
-    time_location = glGetUniformLocation_(rendering, "t");
-    background_time_location = glGetUniformLocation_(background, "t");
 
 #ifndef COMPO
     GetClientRect(window, &client); width = client.right - client.left; height = client.bottom - client.top;
@@ -342,9 +364,9 @@ static int Run(void) {
     // made current, and neither the window nor the resolution ever changes, so
     // the resolution uniforms are set once here rather than every frame.
     glUseProgram_(rendering);
-    glUniform2f_(glGetUniformLocation_(rendering, "r"), (float)width, (float)height);
+    glUniform2f_(UNIFORM_RESOLUTION, (float)width, (float)height);
     glUseProgram_(background);
-    glUniform2f_(glGetUniformLocation_(background, "r"), (float)width, (float)height);
+    glUniform2f_(UNIFORM_RESOLUTION, (float)width, (float)height);
 
     // Buffer name 1 is used without glGenBuffers: the compatibility profile
     // creates an object for any unused name when it is first bound.
@@ -370,11 +392,19 @@ static int Run(void) {
         Report("audio started (waveOut written):", text);
     }
 #endif
-    glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE); glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_POINT_SPRITE);
+    // The destination is scaled by the source's alpha: the background writes
+    // alpha 0 and so replaces what was there, the point sprites write 1 and
+    // add to it. Blending never has to be switched off and on again per frame.
+    glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_SRC_ALPHA); glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_POINT_SPRITE);
     sim_steps = 0; sim_time = 0.f;
     for (;;) {
 #ifdef DEBUG
         while (PeekMessageA(&message, 0, 0, 0, PM_REMOVE)) DispatchMessageA(&message);
+#else
+        // One message a frame, also in the Compo build: a window whose thread
+        // takes none for five seconds is marked as hung, and Windows may then
+        // put a frozen "Not responding" copy over the picture.
+        PeekMessageA(&message, 0, 0, 0, PM_REMOVE);
 #endif
         if (GetAsyncKeyState(VK_ESCAPE)) break;
         // The sound's position is the only clock. The picture starts when the
@@ -406,27 +436,24 @@ static int Run(void) {
         glUseProgram_(simulation);
         for (step = 0; step < MAX_CATCHUP && (float)(sim_steps + 1) * SIM_STEP <= now; step++) {
             sim_time = (float)++sim_steps * SIM_STEP;
-            glUniform1f_(simulation_time_location, sim_time);
-            glUniform1f_(delta_location, SIM_STEP);
+            glUniform1f_(UNIFORM_TIME, sim_time);
+            glUniform1f_(UNIFORM_DELTA, SIM_STEP);
             glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
             glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
-            glUniform1f_(delta_location, -SIM_STEP);
+            glUniform1f_(UNIFORM_DELTA, -SIM_STEP);
             glDispatchCompute_(PARTICLE_COUNT / WORKGROUP_SIZE, 1, 1);
             glMemoryBarrier_(GL_SHADER_STORAGE_BARRIER_BIT);
         }
 
         // glRecti covers every pixel of the viewport in one call, so no glClear
-        // is needed and no vertex data has to be handed over; blending is off
-        // here (opaque replace) and back on for the additive point sprites
-        // drawn over it.
-        glDisable(GL_BLEND);
+        // is needed and no vertex data has to be handed over; its alpha of 0
+        // makes it replace the last frame (see glBlendFunc above).
         glUseProgram_(background);
-        glUniform1f_(background_time_location, sim_time);
+        glUniform1f_(UNIFORM_TIME, sim_time);
         glRecti(-1, -1, 1, 1);
-        glEnable(GL_BLEND);
 
         glUseProgram_(rendering);
-        glUniform1f_(time_location, sim_time);
+        glUniform1f_(UNIFORM_TIME, sim_time);
         glDrawArrays(GL_POINTS, 0, PARTICLE_COUNT);
 #ifdef DEBUG
         // Before the swap: the back buffer is undefined afterwards.
@@ -475,7 +502,12 @@ static int Run(void) {
     }
     // No teardown: ExitProcess drops the render context, the device context and
     // the sound along with the process.
+#ifdef DEBUG
     return 0;
 }
 
 void __cdecl WinMainCRTStartup(void) { ExitProcess((UINT)Run()); }
+#else
+    ExitProcess(0);
+}
+#endif

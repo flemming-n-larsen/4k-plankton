@@ -7,7 +7,8 @@ out vec4 colour;
 // gl_PointCoord is only defined because the C side enables GL_POINT_SPRITE; in a
 // compatibility profile it otherwise reads zero and every fragment is discarded.
 // Clamping the falloff at zero rather than discarding the corner fragments is
-// the same image: blending is GL_ONE, GL_ONE, so a black fragment adds nothing.
+// the same image: blending adds the colour (its alpha of 1 keeps what is
+// already there), so a black fragment adds nothing.
 //
 // A tight core over a faint wide halo, rather than one soft blob. A plain
 // squared falloff is still at half its peak 54% of the way out, so sixteen

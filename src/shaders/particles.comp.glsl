@@ -17,8 +17,8 @@ layout(local_size_x = 256) in;
 // d == 0 initializes the buffer, d > 0 integrates velocity, d < 0 integrates
 // position by -d. Splitting the two integrations avoids reading a neighbour
 // position that another workgroup has already advanced.
-uniform float d;
-uniform float t;
+layout(location = 0) uniform float t;
+layout(location = 1) uniform float d;
 
 // A flat vec4 array rather than an array of two-vec4 structs: the struct and
 // the field names survive minification (--preserve-externals protects the

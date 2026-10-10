@@ -1,7 +1,7 @@
 #version 430
 
-uniform float t;
-uniform vec2 r;
+layout(location = 0) uniform float t;
+layout(location = 1) uniform vec2 r;
 
 // Flat vec4 array, matching particles.comp.glsl: particle n's position is
 // v[n * 2]. The velocity at v[n * 2 + 1] is not read here.
