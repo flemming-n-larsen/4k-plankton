@@ -25,6 +25,20 @@ shaders) was bit for bit the same as before.
 
 (3894 to 3893 was renaming a shader local; see below.)
 
+## Round two: the audio code (October 2026)
+
+From 3886 to 3790 bytes, 96 in all. The sound is unchanged: the `ocean.wav` of a Debug
+`-Optimize` build has the same hash before and after every step except the one that was
+dropped.
+
+| Change | Bytes | Kept |
+| --- | --- | --- |
+| No error checks and no tick-count fallback clock in the audio start-up in Compo; the wave format is an initialised `static` | 3886 to 3813 | yes |
+| `/fp:fast` | 3813 to 3830, and the sound changes | no |
+| The samples in a `static` array instead of `VirtualAlloc` (uninitialised data is free) | 3813 to 3800 | yes |
+| `GenerateOcean` returns nothing | 3800 to 3797 | yes |
+| One `Bump` helper for the five smoothstep-up-then-down pairs | 3797 to 3790 | yes |
+
 ## Crinkler
 
 - **`/TINYHEADER` was a loss on both counts.** The docs said `/TINYHEADER` and
@@ -77,7 +91,7 @@ shaders) was bit for bit the same as before.
 - A shader without `#version` cannot use `layout(location = N)`; with `#version 430` it
   must write an `out` variable instead of `gl_FragColor`.
 
-## Where the bytes are (3886, from the Crinkler report)
+## Where the bytes are (3886, before round two, from the Crinkler report)
 
 Compressed: the shaders about 1,480 (vertex 541, compute 549, background 325, sprite 67),
 the audio code about 1,150 (`GenerateOcean` alone 859), the main function 429, the OpenGL
