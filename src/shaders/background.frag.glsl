@@ -71,8 +71,13 @@ void main() {
     // uniform lattice; the radius stays positive for every cell either way,
     // since smoothstep with two equal edges is undefined.
     vec2 cells = vec2(p.x * r.x / r.y, p.y);
+    // A third, finer layer of small bubbles that only shows around the duck,
+    // while it is held (45..57 s, as in particles.comp.glsl), so it swims in a
+    // cloud of them. Its cells are small, so its bubbles are too.
+    float duck = smoothstep(45., 48., t) * (1. - smoothstep(53., 57., t))
+               * (1. - smoothstep(.3, .75, length((p - .5) * vec2(1.4, 1.)))) * 4.;
     float bubbles = 0.;
-    for (int layer = 0; layer < 2; layer++) {
+    for (int layer = 0; layer < 3; layer++) {
         float depth = float(layer);
         vec2 grid = cells * (6. + depth * 4.) + vec2(depth * 3.7, -t);
         vec2 index = floor(grid);
@@ -86,7 +91,7 @@ void main() {
         // placement from the size, so the layers do not show their lattice.
         float d = length(centre);
         bubbles += (smoothstep(radius, radius * .8, d) - smoothstep(radius * .76, radius * .5, d))
-                 * max(h - .84, 0.) * 6.;
+                 * max(h - .84, 0.) * 6. * (layer < 2 ? 1. : duck);
     }
     water += bubbles * vec3(.5, .8, .9) * .15 * (.3 + .7 * rise);
 

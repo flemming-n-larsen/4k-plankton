@@ -717,6 +717,8 @@ from world up, so screen-vertical is world-vertical. The grid is built on an
 aspect-corrected copy of the screen coordinate, without which the cells would be
 16:9 wide and every bubble a visible ellipse.
 
+A third, finer layer shows only around the duck, from 45 to 57 seconds: the same loop with smaller cells, weighted by the duck's window and by distance from the screen centre, so the duck swims in a cloud of small bubbles. It cost 25 bytes (4002 to 4027).
+
 Each bubble is an annulus, not a filled disc. A filled blob reads as
 out-of-focus dust; a bright rim around a dark middle reads as a bubble catching
 the light from above. Only cells hashing above a threshold carry one, so the
