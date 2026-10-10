@@ -27,9 +27,9 @@ shaders) was bit for bit the same as before.
 
 ## Round two: the audio code (October 2026)
 
-From 3886 to 3790 bytes, 96 in all. The sound is unchanged: the `ocean.wav` of a Debug
-`-Optimize` build has the same hash before and after every step except the one that was
-dropped.
+From 3886 to 3774 bytes, 112 in all. The `ocean.wav` of a Debug `-Optimize` build has the
+same hash before and after every step except the ones marked below, so a size change is
+proved to have left the sound alone.
 
 | Change | Bytes | Kept |
 | --- | --- | --- |
@@ -38,6 +38,9 @@ dropped.
 | The samples in a `static` array instead of `VirtualAlloc` (uninitialised data is free) | 3813 to 3800 | yes |
 | `GenerateOcean` returns nothing | 3800 to 3797 | yes |
 | One `Bump` helper for the five smoothstep-up-then-down pairs | 3797 to 3790 | yes |
+| No guaranteed bubble chain at the reveal (`logo_chain_started`) | 3790 to 3774 | yes; the sound changes: from 30 s the random bubbles are another draw, tones and levels the same |
+| The five one-pole filters through one `Lowpass` helper | 3774 to 3774 | yes, for readability; sound identical |
+| Two foam filter stages instead of three | 3774 to 3764 | no; the foam gets 5% different and brighter for 10 bytes |
 
 ## Crinkler
 
