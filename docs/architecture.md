@@ -203,7 +203,7 @@ Compo build can do.
 Plankton is a CRT-free Win32/x86 executable running a 3D
 [Particle Life](https://particle-life.com/) simulation on the GPU, named after
 the drifting swarm it depicts, with synthesized audio (see Audio direction
-below). The run is 59 seconds long. GLSL source is kept
+below). The run is 65 seconds long. GLSL source is kept
 readable under `src/shaders/` for Debug and minified into generated C strings
 for Compo. It has no external graphics framework or runtime dependency beyond
 the Windows system libraries, the OpenGL driver, and `winmm.dll` for audio
@@ -413,9 +413,32 @@ the word's size and is the difference between a logo with air around it and a
 logo with a letter cut off the side of a projector screen.
 
 The whole scene also fades: in from black over the first 5 seconds, and back to
-black over seconds 48 to 56, which is
-12 seconds after the reveal ease ends, ending the intro on the dissolving word
-rather than an abrupt cut.
+black over seconds 54 to 62, which is
+long enough after the word and the duck have come apart that the intro ends on
+the swarm rather than an abrupt cut.
+
+### The rubber duck
+
+The TRSAC mascot appears as the word comes apart. `DuckTarget` in
+`particles.comp.glsl` gives each taking part particle a spot on a duck seen from
+the side, facing left, and the same strong pull as the letters draws it there
+over seconds 45 to 48 and lets it go over 53 to 57, so the duck dissolves into
+cells the way the word does. It is a filled silhouette, not an outline: a few
+thousand points read as a duck when they cover it. The gold species (about 2,700
+particles) fills the body, the head and the tail as ellipsoids, so the duck has
+volume in depth. A sixth of the red species is a triangle for the beak, and a
+sixteenth of the cyan one a ring packed tightly enough to burn out to white for
+the eye; the gold keeps clear of the ring, which leaves a dark pupil. While the
+duck forms its gold glows brighter and every particle that is not part of it
+fades back, so the cells swimming past do not cover it. The test for who takes
+part is written twice, in the compute and the vertex shader, and must match.
+The duck cost 251 bytes with its depth, ring and dimming (3769 to 4020), about
+190 of them the shape itself.
+
+The letters have depth too: each stroke is a round tube, deepest along its
+middle, and the camera's sway during the hold is twice what it was, so the word
+turns a little and its depth shows. T and S sit closer to U and T than the font
+units first gave them, and the word is centred on the extremes of its strokes.
 
 The fade-in is short because the ascent means the intro opens on its darkest
 frame, and the target venue is a projector in a blacked-out hall. Modelling one

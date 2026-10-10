@@ -235,7 +235,7 @@ static void GenerateOcean(void) {
         // written against: every number below that is compared with it is twice
         // the time in seconds. These windows must stay in step with the shaders:
         // 6..30 s is the ascent, 34..36 s is when the word snaps together, and
-        // 48..56 s is the master fade.
+        // 54..62 s is the master fade.
         float half = (float)i * (2.f / SAMPLE_RATE);
         float arc = .3f + .7f * Smoothstep(12, 60, half);
         // The small swell under the wave of light at 17..21, so the free-swim
@@ -254,7 +254,7 @@ static void GenerateOcean(void) {
                          + Bump(94, 98, 108, 112, half);
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
-        float fade = 1.f - Smoothstep(96, 112, half);
+        float fade = 1.f - Smoothstep(108, 124, half);
         Lowpass(&surf1, white, .035f);
         Lowpass(&surf2, surf1, .035f);
         shaped = Waypoint(0, SWELL_SAMPLES);

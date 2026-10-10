@@ -61,8 +61,8 @@ vec2 StrokePoint(int stroke, float u, float jitter) {
         float a = 3.14159 + 3.1416 * u;
         return vec2(1.15, .35) + (.3 + jitter) * vec2(cos(a), sin(a));                          // U: bottom half-circle
     }
-    if (stroke == 6) return vec2(1.7 + .6 * u, 1. + jitter);                                    // T: top bar
-    if (stroke == 7) return vec2(2. + jitter, u);                                               // T: stem
+    if (stroke == 6) return vec2(1.62 + .6 * u, 1. + jitter);                                    // T: top bar
+    if (stroke == 7) return vec2(1.92 + jitter, u);                                               // T: stem
     // Each S arc sweeps 3/4 of a circle rather than half, so the terminals
     // curl back into a hook past vertical instead of ending flat. Both are
     // also rotated 30 degrees the same way: with no rotation, the two circles
@@ -71,10 +71,10 @@ vec2 StrokePoint(int stroke, float u, float jitter) {
     // directions and pinches into a bowtie instead of a flowing diagonal.
     if (stroke == 8) {
         float a = .2618 + 4.7124 * u;
-        return vec2(2.85, .75) + (.25 + jitter) * vec2(cos(a), sin(a));                         // S: upper 3/4-circle, bulging left
+        return vec2(2.68, .75) + (.25 + jitter) * vec2(cos(a), sin(a));                         // S: upper 3/4-circle, bulging left
     }
     float a = 4.7124 * u - 2.8798;
-    return vec2(2.85, .25) + (.25 + jitter) * vec2(cos(a), sin(a));                             // S: lower 3/4-circle, bulging right
+    return vec2(2.68, .25) + (.25 + jitter) * vec2(cos(a), sin(a));                             // S: lower 3/4-circle, bulging right
 }
 
 // World-space target for particle index i: picks one of the 10 strokes and a
@@ -86,11 +86,43 @@ vec2 StrokePoint(int stroke, float u, float jitter) {
 // spread along each stroke, since nearby particle indices no longer hashed to
 // distinct values.
 vec3 LetterTarget(float i) {
-    vec2 local = StrokePoint(int(hash(i * 1.3 + 77.) * 10.), hash(i * 2.9 + 12.), (hash(i * 1.9 + 41.) - .5) * .1);
+    // The position across the stroke, -1 to 1. It sets the jitter and, as a round
+    // cross-section, the depth: the stroke is a tube, deepest along its middle.
+    float across = hash(i * 1.9 + 41.) * 2. - 1.;
+    vec2 local = StrokePoint(int(hash(i * 1.3 + 77.) * 10.), hash(i * 2.9 + 12.), across * .05);
     // .8: scaled up together with the camera dolly-in in particles.vert.glsl
     // so the finished word fills as much of the frame as its wide, 4-letter
     // aspect ratio allows without clipping horizontally.
-    return vec3((local.x - 1.575) * .8, (local.y - .5) * .8, 0.);
+    return vec3((local.x - 1.465) * .8, (local.y - .5) * .8, sqrt(1. - across * across) * (hash(i * 4.1 + 6.) * 2. - 1.) * .1);
+}
+
+// World-space target on a rubber duck seen from the side, facing left. A filled
+// silhouette rather than an outline: a few thousand points read as a duck when
+// they cover it, and as a tangle when they trace it. The gold species fills the
+// body, the head and the tail, each a random spot in a unit disc stretched and
+// moved into place. The beak is a triangle of a sixth of the red species, and a
+// slice of the cyan one makes a ring for the eye, packed tightly enough to
+// burn out to white.
+// The gold keeps clear of the eye, which leaves the pupil dark.
+vec3 DuckTarget(float i, float type) {
+    float a = hash(i * 1.7 + 5.), b = hash(i * 2.3 + 9.);
+    vec2 eye = vec2(-.18, .58), direction = vec2(cos(b * 6.2832), sin(b * 6.2832)), p;
+    float z = 0.;
+    if (type == 4.) {
+        if (a + b > 1.) { a = 1. - a; b = 1. - b; }
+        p = vec2(-.4, .55) + a * vec2(-.38, -.17) + b * vec2(0., -.3);
+    } else if (type == 1.) {
+        p = eye + direction * (.06 + .06 * a);
+        z = .25;
+    } else {
+        direction *= sqrt(hash(i * 3.1 + 2.));
+        z = sqrt(1. - dot(direction, direction)) * (hash(i * 5.3 + 1.) * 2. - 1.) * .3;
+        p = a < .62 ? direction * vec2(.72, .54) + vec2(.07, -.33)
+          : a < .95 ? direction * .46 + vec2(.08, .5)
+          : direction * vec2(.13, .25) + vec2(.77, -.1);
+        p = eye + (p - eye) * max(1., .12 / length(p - eye));
+    }
+    return vec3(p, z) * .72;
 }
 
 void main() {
@@ -193,6 +225,11 @@ void main() {
         // what is left.
         force = mix(force, (target - self.xyz) * 60., reveal);
     }
+
+    // The gold species and slices of the red and cyan ones gather into the duck as the word comes apart,
+    // and are let go again from 53 to 57 seconds, so the duck dissolves back into
+    // the swarm the way the word did.
+    if (self.w == 5. || self.w == 4. && i % 6u == 0u || self.w == 1. && i % 16u == 0u) force = mix(force, (DuckTarget(float(i), self.w) - self.xyz) * 60., smoothstep(45., 48., t) * (1. - smoothstep(53., 57., t)));
 
     vec3 velocity = v[b + 1].xyz + force * d;
     v[b + 1] = vec4(velocity * exp(-17. * d), 0.);

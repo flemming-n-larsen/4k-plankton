@@ -12,7 +12,8 @@ the plankton. The species attract and repel each other, so the dots gather into
 colonies of living cells that swim and flash through an underwater ascent, from
 the dark deep up toward the light. A wave of light crosses the swarm, and near
 the end the dots gather, letter by letter, into the word NUTS, then dissolve
-back into living cells. Everything is generated at runtime: the simulation, the
+back into living cells while the gold ones form a rubber duck, the TRSAC
+mascot, which dissolves in turn. Everything is generated at runtime: the simulation, the
 background, and the ocean ambience with its short four-note motif.
 
 Files

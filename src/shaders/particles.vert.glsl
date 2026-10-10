@@ -53,7 +53,7 @@ void main() {
     // having some dimension. The periods, 25s and 37s, are long enough that the
     // eight-second hold sees well under half a cycle - a drift, not a wobble.
     float rest = 1. - reveal;
-    float azimuth = t * .13 * rest + sin(t * .25) * .045 * reveal;
+    float azimuth = t * .13 * rest + sin(t * .25) * .09 * reveal;
     float elevation = sin(t * .07) * .5 * rest + sin(t * .17) * .03 * reveal;
     float sa = sin(azimuth), ca = cos(azimuth), se = sin(elevation), ce = cos(elevation);
 
@@ -184,10 +184,16 @@ void main() {
     // exactly on the timeline, with no constant to keep in step. While the
     // cluster is just drifting it reads as a faint twinkle on the fastest cells.
     c *= 1. + .5 * length(v[gl_VertexID * 2 + 1].xyz);
+    // The duck: its gold glows brighter while it gathers, and every particle that
+    // is not part of it (the same test as in particles.comp.glsl) fades back, so
+    // the cells swimming past do not cover it.
+    float duck = smoothstep(45., 48., t) * (1. - smoothstep(53., 57., t));
+    if (particle.w == 5.) c *= 1. + 2.5 * duck;
+    else if (!(particle.w == 4. && gl_VertexID % 6 == 0 || particle.w == 1. && gl_VertexID % 16 == 0)) c *= 1. - .7 * duck;
     // Fades in from black, then back to black a few seconds after NUTS is fully
     // formed, ending the intro on the held word rather than an abrupt cut. Must
     // match the copy in background.frag.glsl.
-    c *= min(smoothstep(0., 5., t), 1. - smoothstep(48., 56., t));
+    c *= min(smoothstep(0., 5., t), 1. - smoothstep(54., 62., t));
     // The per-particle distance fade, exp(-.55 * (view.z - .5)), folded in.
     c *= exp(.275 - .55 * view.z);
 }

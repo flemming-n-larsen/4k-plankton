@@ -4,7 +4,7 @@
 
 This repository develops **Plankton**, a native PC in4k intro: a Windows executable that must fit within a 4,096-byte competition limit.
 
-It is a CRT-free Win32/x86 executable running a 3D Particle Life simulation in an OpenGL compute shader, drawn as additive point sprites over a procedural underwater background, with runtime-synthesized audio. The run is 59 seconds. Audio is implemented in `src/audio.c` and must stay behind the `src/audio.h` boundary.
+It is a CRT-free Win32/x86 executable running a 3D Particle Life simulation in an OpenGL compute shader, drawn as additive point sprites over a procedural underwater background, with runtime-synthesized audio. The run is 65 seconds. Audio is implemented in `src/audio.c` and must stay behind the `src/audio.h` boundary.
 
 ## Build workflow
 
