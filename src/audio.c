@@ -219,7 +219,6 @@ static void GenerateOcean(void) {
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, foam3 = 0.f, previous_white = 0.f;
     float accent = 0.f, accent_ratio = 1.f;
     int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
-    int logo_chain_started = 0;
     float bubble_frequency = 0.f;
     rng_state = AUDIO_SEED;
     for (i = 0; i < RUN_SAMPLES; i++) {
@@ -248,12 +247,6 @@ static void GenerateOcean(void) {
         // does not call attention to one arbitrary sample boundary.
         float logo_burst = Bump(58, 62, 70, 74, half)
                          + Bump(94, 98, 108, 112, half);
-        // Guarantee that the assembly has a live chain even if the previous
-        // random chain happened to finish just before the logo starts.
-        if (half >= 60.f && half < 62.f && !logo_chain_started) {
-            logo_chain_started = 1;
-            if (!bubble_age && !bubble_chain) bubble_counter = 0;
-        }
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
         float fade = 1.f - Smoothstep(96, 112, half);
