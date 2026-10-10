@@ -13,7 +13,7 @@ A Win32/x86 executable of at most 4,096 bytes for the [TRSAC 4 KB compo](https:/
 | Compo PC 2 | i7-11700, RTX 3070, 32 GB, latest NVIDIA drivers |
 | Resolution | at least a 1920x1080 and a 1280x720 `.exe` |
 | Runtime | 5 minutes at most |
-| Submission | includes an information file (`release/info.txt`) |
+| Submission | includes an information file (`release/plankton.nfo`) |
 
 Two rules shape the code:
 
