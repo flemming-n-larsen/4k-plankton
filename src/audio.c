@@ -161,6 +161,11 @@ static float __vectorcall Smoothstep(int edge0, int edge1, float x) {
     return f * f * (3.f - 2.f * f);
 }
 
+// One-pole low-pass: the state moves a fraction k of the way to the input.
+static float __vectorcall Lowpass(float* state, float input, float k) {
+    return *state += (input - *state) * k;
+}
+
 // A swell: up between the first two edges, down between the last two.
 static float __vectorcall Bump(int up0, int up1, int down0, int down1, float x) {
     return Smoothstep(up0, up1, x) * (1.f - Smoothstep(down0, down1, x));
@@ -250,16 +255,16 @@ static void GenerateOcean(void) {
         // The master fade is pulled out of macro and applied to the finished
         // mix instead, so it takes the tonal layer down with the ambience.
         float fade = 1.f - Smoothstep(96, 112, half);
-        surf1 += (white - surf1) * .035f;
-        surf2 += (surf1 - surf2) * .035f;
+        Lowpass(&surf1, white, .035f);
+        Lowpass(&surf2, surf1, .035f);
         shaped = Waypoint(0, SWELL_SAMPLES);
         texture = Waypoint(1, TEXTURE_SAMPLES);
 
         foam_raw = white2 - previous_white;
         previous_white = white2;
-        foam1 += (foam_raw - foam1) * .14f;
-        foam2 += (foam1 - foam2) * .14f;
-        foam3 += (foam2 - foam3) * .14f;
+        Lowpass(&foam1, foam_raw, .14f);
+        Lowpass(&foam2, foam1, .14f);
+        Lowpass(&foam3, foam2, .14f);
 
         // The chord section, on the same clock as the macro envelope above.
         section = half < 36.f ? 0 : half < 48.f ? 1
