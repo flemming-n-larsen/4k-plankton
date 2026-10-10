@@ -17,7 +17,9 @@ __declspec(dllimport) UINT __stdcall waveOutWrite(void* device, WaveHeader* head
 __declspec(dllimport) UINT __stdcall waveOutGetPosition(void* device, WaveTime* time, UINT size);
 static void* device;
 static WaveHeader header;
+#ifdef DEBUG
 static DWORD fallback_ticks;
+#endif
 
 #define SAMPLE_RATE AUDIO_SAMPLE_RATE
 // One buffer covering the whole run rather than a short loop, so the envelope
@@ -213,7 +215,9 @@ static void* GenerateOcean(void) {
     int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
     int logo_chain_started = 0;
     float bubble_frequency = 0.f;
+#ifdef DEBUG
     if (!pcm) return 0;
+#endif
 
     rng_state = AUDIO_SEED;
     for (i = 0; i < RUN_SAMPLES; i++) {
@@ -348,12 +352,14 @@ static void* GenerateOcean(void) {
     return pcm;
 }
 
+// An initialised static rather than a local filled in field by field.
+static const WaveFormat format = { 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16, 0 };
+
 void AudioStart(void) {
-    WaveFormat format = { 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16, 0 };
     header.data = (char*)GenerateOcean();
     header.length = RUN_SAMPLES * 2;
-    fallback_ticks = GetTickCount();
 #ifdef DEBUG
+    fallback_ticks = GetTickCount();
     // Written so the generated sound can be reviewed outside the running
     // intro; not part of the Compo path.
     if (header.data) {
@@ -365,16 +371,22 @@ void AudioStart(void) {
             CloseHandle(file);
         }
     }
-#endif
     // Without a buffer or a device the intro still runs, on the tick count.
     if (!header.data || waveOutOpen(&device, (UINT)-1, &format, 0, 0, 0)) { device = 0; return; }
+#else
+    // No fallbacks in the Compo build: the compo machines have a sound device,
+    // and without one there is nothing to hear.
+    waveOutOpen(&device, (UINT)-1, &format, 0, 0, 0);
+#endif
     waveOutPrepareHeader(device, &header, sizeof(header));
     waveOutWrite(device, &header, sizeof(header));
 }
 
 int AudioSamples(void) {
     WaveTime time = { 2 };    // TIME_SAMPLES
+#ifdef DEBUG
     if (!device) return (int)((float)(int)(GetTickCount() - fallback_ticks) * (SAMPLE_RATE * .001f));
+#endif
     waveOutGetPosition(device, &time, sizeof(time));
     return (int)time.value;
 }
