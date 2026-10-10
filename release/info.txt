@@ -4,7 +4,6 @@ Plankton
 Title    : Plankton
 Author   : Mad Smiley / Nuts
 Category : PC 4K intro (TRSAC 4 KB compo)
-Length   : 59 seconds; exits on its own
 
 Description
 -----------
@@ -45,10 +44,6 @@ Start the exe. Press Escape to quit early.
 Notes
 -----
 - The window has no close button handling; use Escape.
-- The executable is compressed very hard to fit the size limit, so on start-up it
-  needs to unpack itself first. Nothing is shown until that is done, which can
-  take several seconds (about 11 s on one slow-unpack test machine; faster on
-  quicker CPUs). Please wait for the window; the intro runs 59 seconds after it.
 - Source, build scripts and credits: see the project repository
   (README.md and CREDITS.md).
 - Packed with Crinkler (Rune L. H. Stubbe and Aske Simon Christensen),
