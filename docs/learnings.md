@@ -1,138 +1,75 @@
 # Learnings
 
-What Plankton has learned about 4k intros on Windows with C, OpenGL, Shader Minifier and
-Crinkler 3.0b, measured on this intro. The numbers are bytes of the Compo executable. Most
-points in the first round came from the sister intro NUTS (`4k-nuts`, its
-`docs/learnings.md`) and were measured again here before they were kept; NUTS and
-Plankton share the toolchain, so a learning in one is worth trying in the other.
+Lessons for a 4k intro on Windows with C, OpenGL, Shader Minifier and Crinkler 3.0b, measured on Plankton. Savings are bytes of the Compo executable. The sister intro NUTS (`4k-nuts`) shares the toolchain, so a lesson in one is worth trying in the other. Measure it again before keeping it: sizes move with the program.
 
-## Round one: from NUTS (October 2026)
+## Tips & Tricks
 
-From 4020 to 3886 bytes, 134 bytes in all, and the window now opens after 0.3 s instead
-of 11.5 s. Every Debug frame compared (5, 25, 35 and 50 s, with and without minified
-shaders) was bit for bit the same as before.
+### Measuring
 
-| Change | Bytes | Kept |
-| --- | --- | --- |
-| No `/TINYHEADER` (normal Crinkler header, `/COMPMODE:VERYSLOW`) | 4020 to 4000 | yes |
-| `/SATURATE`, which `/TINYHEADER` had ignored | 4000 to 3998 | yes |
-| Fixed uniform locations, `layout(location = N)`, no `glGetUniformLocation` | 4000 to 3959 | yes |
-| `PIXELFORMATDESCRIPTOR` as an initialised `static` | 3959 to 3914 | yes |
-| No error checks in Compo; the main function is the entry point and ends in `ExitProcess(0)` | 3914 to 3881 | yes |
-| `LoadOpenGl` (called once) folded into the main function | 3881 to 3884 | no |
-| One `PeekMessageA` a frame in Compo | 3881 to 3894 | yes, it is a fix |
-| Blending never switched off: `glBlendFunc(GL_ONE, GL_SRC_ALPHA)`, the background writes alpha 0 | 3893 to 3886 | yes |
+- Judge a change on a full Compo build. Small changes move the size by a few bytes either way through Crinkler's section ordering, even moving a function in the source.
+- A claim that held once can stop holding. Measure again when the program changes.
+- Prove that a size change left the sound alone: build Debug with `-Optimize` before and after, and `cmp` the two `ocean.wav` files. The Debug `-Optimize` build does not truncate floats, so it cannot show the effect of `/TRUNCATEFLOATS`; listen to the Compo build for that.
+- Prove that a shader change left the picture alone: compare `-shot` captures, with and without `-MinifyShaders`.
+- Check the Compo executable for the whole run, with a timeout longer than the run plus start-up, and check that it ends by itself.
+- Time the start-up after any Crinkler change: start the executable and poll for a main window handle.
 
-(3894 to 3893 was renaming a shader local; see below.)
+### Crinkler
 
-## Round two: the audio code (October 2026)
+- Use the normal header. `/TINYHEADER` was 20 bytes larger than the normal header with `/COMPMODE:VERYSLOW`, because it ignores `/COMPMODE`, `/SATURATE` and the hash options, and its slow decompressor kept the screen black for about 11.5 s against 0.3 s. The gain of the pair was `/TINYIMPORT` alone.
+- `/SATURATE` saves 2 bytes with the normal header and is ignored with `/TINYHEADER`.
+- `/TRUNCATEFLOATS:16` rounds the compiler's `__real@` float literals, which compresses well: 4,031 bytes without it, 4,017 at 20 bits, 4,006 at 18, 3,995 at 16, 3,990 at 14. It leaves tables (`static const float pitch[]`), byte tables, strings and shader text alone.
+  - The number is the bits kept of the whole float, sign and exponent included. A float has 9 of those before the mantissa, so 12 keeps 3 mantissa bits (error up to 12%) and 16 keeps 7 (up to 0.8%).
+  - At 12 the sound had a constant howl: the decay `.99993` rounded to exactly 1, so the tone never died, and every filter and clock literal was off by percent.
+  - A constant a hair from 1 cannot survive the option at any useful width. Write it as a power of two: `accent -= accent * (1.f / 16384)`.
+  - Do not go below 16 without listening to the Compo build first.
+- `/UNSAFEIMPORT` adds nothing on top of `/TINYIMPORT`. `/ORDERTRIES` plateaus at 10000, and `/HASHTRIES` does not help.
 
-From 3886 to 3774 bytes, 112 in all. The `ocean.wav` of a Debug `-Optimize` build has the
-same hash before and after every step except the ones marked below, so a size change is
-proved to have left the sound alone.
+### C and MSVC (`/O1 /Os /Oy- /Ob0`, no CRT)
 
-| Change | Bytes | Kept |
-| --- | --- | --- |
-| No error checks and no tick-count fallback clock in the audio start-up in Compo; the wave format is an initialised `static` | 3886 to 3813 | yes |
-| `/fp:fast` | 3813 to 3830, and the sound changes | no |
-| The samples in a `static` array instead of `VirtualAlloc` (uninitialised data is free) | 3813 to 3800 | yes |
-| `GenerateOcean` returns nothing | 3800 to 3797 | yes |
-| One `Bump` helper for the five smoothstep-up-then-down pairs | 3797 to 3790 | yes |
-| No guaranteed bubble chain at the reveal (`logo_chain_started`) | 3790 to 3774 | yes; the sound changes: from 30 s the random bubbles are another draw, tones and levels the same |
-| The five one-pole filters through one `Lowpass` helper | 3774 to 3774 | yes, for readability; sound identical |
-| Two foam filter stages instead of three | 3774 to 3764 | no; the foam gets 5% different and brighter for 10 bytes |
+- Initialised constants instead of filling in locals. A `PIXELFORMATDESCRIPTOR` and the wave format as initialised `static`s are worth 45 and a few bytes: mostly-zero data costs almost nothing.
+- No error checks in Compo. No checks, no fallback clock and no wrapper around the main function: the main function is the entry point and ends in `ExitProcess(0)` (33 bytes), and the audio start-up checks and fallback clock are another 73. Keep the checks under `#ifdef DEBUG`, where they find the problems.
+- Put big arrays in `static` storage, not `VirtualAlloc`: uninitialised data is free (13 bytes).
+- Do not fold a once-called function into its caller by assumption. It saved 8 bytes in NUTS and cost 3 in Plankton.
+- Float helpers as `__vectorcall` keep the result in `xmm0`. The default x86 convention returns floats in the x87 register, so the compiler stores and reloads each result (about 10 bytes per call) and mixes x87 and SSE arithmetic in one expression. `__vectorcall` saved 50 bytes. It also made optimised and unoptimised builds bit-identical, which is what makes the Debug `ocean.wav` a valid reference for Compo. Without it, the two differ by one least significant bit in 3 of 1.65 million samples.
+- Pass small whole numbers, not floats. `Smoothstep` takes its edges as ints in half seconds: a float constant is a five-byte `push` at every call, an int under 128 is two. Doubling is exact in floating point, so the result is bit-identical (26 bytes).
+- `/Oy-` and `/Ob0`. Keeping the frame pointer makes each of the audio code's many float spills one byte shorter (25 bytes), and `/Ob0` stops the inlining of small helpers (37 bytes). `/Gy` changes nothing, `/Gy /Gw` is 10 bytes worse, and `/Gr`, `/Gv` and `/Oi-` change nothing.
+- Share helpers: one `Lowpass` for all five one-pole filters and one `Bump` for the smoothstep-up-then-down pairs (7 bytes).
+- Avoid casts to unsigned. A float-to-unsigned cast pulls in a CRT helper that `/NODEFAULTLIB` cannot resolve. Cast through a signed `int`.
+- `/arch:IA32` is a loss. x87 float-to-int conversion calls a CRT helper. With a `fisttp` stub for `_ftol2_sse` it still came out 50 bytes larger.
+- `/fp:fast` was 17 bytes larger and changed the sound.
+- A fourth motif statement is cheap. Reusing the oscillator and the note trigger costs about 10-30 bytes per extra statement; a new quack voice with its own resonator cost about 105.
 
-## Crinkler `/TRUNCATEFLOATS` works at 16, and the number counts the whole float
+### Windows
 
-`/TRUNCATEFLOATS:bits` rounds the float constants the compiler writes as `__real@...`
-literals, which compresses well: 4031 bytes without it, 4017 at 20 bits, 4006 at 18,
-3995 at 16, 3990 at 14, and 3977 at 12. It leaves tables (`static const float pitch[]`),
-byte tables, strings and the shader text alone; this was checked by dumping the unpacked
-program from memory and comparing it with the build without the option.
+- Take one message a frame in Compo. Without `PeekMessageA(&message, 0, 0, 0, PM_REMOVE)` (13 bytes), `IsHungAppWindow` reports the window hung within seconds and Windows may cover the picture with a frozen "Not responding" copy, for example when someone at the party moves the mouse.
+- Borderless fullscreen is `WS_POPUP` plus `WS_EX_TOPMOST` plus `ShowCursor(0)`, 9 bytes. `ChangeDisplaySettings` risks a forced mode change failing on the compo machine and costs more.
+- A GDI screen grab of the fullscreen window is black. Capture the back buffer in-process (Debug `-shot`).
 
-**The number is the bits kept of the whole float, sign and exponent included.** A float has
-9 of those before its mantissa, so 12 keeps 3 mantissa bits, an error of up to 12%, and 16
-keeps 7, up to 0.8%. At 12 the sound had a constant howling tone and was worse: `.99993`,
-the decay of the struck tone, was rounded to exactly 1, so the tone never died, and every
-literal in the filters and the clock was off by percent. A constant that is a hair from 1
-cannot survive the option at any useful width, so it is written as a power of two instead
-(`accent -= accent * (1.f / 16384)`, which is also 14% slower than before). The other
-literals are only off by up to 0.8%, which moves the filter corners and the clock a hair
-and keeps the pitches, since those sit in a table.
+### OpenGL and shaders
 
-Judge a width by running the whole Compo build and listening: the Debug `-Optimize` build
-does not truncate, so its `ocean.wav` cannot show it. Do not use a value below 16 without
-listening first.
+- Fixed uniform locations (`layout(location = N)`) drop `glGetUniformLocation`, its function-table entry and the name strings: 41 bytes with six uniforms across three programs. One constant serves all programs.
+- Set the blend state once. `GL_ONE, GL_SRC_ALPHA` lets one function both replace (source alpha 0) and add (source alpha 1), so the background pass needs no `glDisable` and `glEnable` and no `glClear` (7 bytes).
+- Draw points with no vertex buffer: compatibility-profile `GL_POINTS` read from the SSBO by `gl_VertexID`. Enable `GL_POINT_SPRITE` or `gl_PointCoord` is zero and the screen stays black without a GL error.
+- A fragment-only program runs the fixed-function vertex stage, so a fullscreen `glRecti(-1, -1, 1, 1)` needs no vertex shader.
+- Shader Minifier does not catch shadowing. An `out vec4 colour` next to a local `vec3 colour` minified to a program the driver rejects, while the build succeeded. After renaming anything shaders share, read the minified output or run Debug with `-MinifyShaders` and compare frames.
+- A shader without `#version` cannot use `layout(location = N)`. With `#version 430` it must write an `out` variable instead of `gl_FragColor`.
+- Shader Minifier does not substitute object-like macros, so a `#define` costs its line and its full name at every use. Write literals and name them in comments, which are stripped.
+- `--field-names stpq` compresses 5 bytes better than the default (`rgba` is 1 better, `xyzw` equal). `--preprocess` is a no-op, `--aggressive-inlining` and `--no-sequence` change nothing, and `--move-declarations` is 31 bytes worse.
+- A single `vec4` flat array in the SSBO instead of structs: `--preserve-externals` keeps the struct and its long field names at every use site.
+- Look for tables that are a formula, such as `vec4(.07, .035, .0175, .00875)[i]`, which is `.07 / exp2(i)`.
 
-## Crinkler
+### Sound
 
-- **`/TINYHEADER` was a loss on both counts.** The docs said `/TINYHEADER` and
-  `/TINYIMPORT` together were worth about 100 bytes, and the long start-up was accepted as
-  the price. Measured on the same object files, the normal header is 20 bytes smaller
-  with `/COMPMODE:VERYSLOW` (`/TINYHEADER` ignores `/COMPMODE`, `/SATURATE` and the hash
-  options), and the window opens after 0.3 s instead of 11.5 s. NUTS saw the same: 11
-  bytes larger, 16 s against 0.3 s. The gain was `/TINYIMPORT` alone.
-- **Measure a claim again when the program has changed.** A flag that won once can lose
-  later; the 100 bytes were probably measured when the code was much smaller, or against a
-  faster `/COMPMODE`.
-- Time the start-up after every Crinkler change: start the executable and poll the
-  process for a main window handle (the process has one thread while it unpacks).
-- Small changes move the size by a few bytes either way through Crinkler's section
-  ordering, even moving a function in the source. Judge a change on a full build.
+- A sound that does not repeat needs a one-shot buffer, and then its timing must follow the sound. Make the sound the clock (`waveOutGetPosition`), and keep the simulation on a fixed step so the picture is deterministic.
+- Keep the pad out of the water's way: pad pitches above the surf body and below the foam band, and a chord change no voice takes by more than a whole step.
+- Saturate the ambience before adding the tonal layer, and limit the sum with a cubic soft clip instead of a second knee. Two foam stages instead of three saved 10 bytes but changed the foam's balance, so it was not kept.
 
-## Windows
+## Where the bytes are
 
-- **Take one message a frame, also in Compo.** Without it `IsHungAppWindow` reported the
-  Compo window hung within seconds, and Windows may then cover the picture with a frozen
-  "Not responding" copy, for example when someone at the party moves the mouse. One
-  `PeekMessageA(&message, 0, 0, 0, PM_REMOVE)` without dispatching is enough (13 bytes).
-- Test the Compo executable for the whole run, with a timeout longer than the run plus
-  start-up, and check that it ends by itself.
+Compressed sizes from the Crinkler report at about 3,890 bytes: shaders about 1,480 (vertex 541, compute 549, background 325, sprite 67), audio code about 1,150 (`GenerateOcean` alone 859), the main function 429, the OpenGL name table 97 and the loader 34. The C side of the graphics is about 560 bytes, much of it window and context setup every intro has. The shaders and the synthesizer are where the large savings are.
 
-## C for size with MSVC (`/O1 /Os /Oy- /Ob0`, no CRT)
+## Worth trying
 
-- **Initialised constants instead of filling in locals**: the `PIXELFORMATDESCRIPTOR`, 45
-  bytes. Mostly-zero data costs almost nothing.
-- **No error checks in Compo** and no wrapper around the main function: 33 bytes. Keep the
-  checks under `#ifdef DEBUG`, where they find the problems.
-- Folding a function that is called once into its caller saved 8 bytes in NUTS but cost 3
-  here. Measure; do not assume.
-- Already in Plankton before NUTS: whole-number arguments instead of float ones
-  (`Smoothstep`), and `__vectorcall` for the float helpers so the result stays in `xmm0`
-  (see `docs/architecture.md`, Audio).
-
-## OpenGL and shaders
-
-- **Fixed uniform locations** (`layout(location = N)`): 41 bytes, more than the 24 in NUTS,
-  because Plankton looked up six uniforms in three programs. The same location can be
-  reused across programs, so one constant (`UNIFORM_TIME`) serves all three.
-- **Blend state set once.** `GL_ONE, GL_SRC_ALPHA` lets one blend function both replace
-  (source alpha 0) and add (source alpha 1), so the background pass needs no
-  `glDisable`/`glEnable` around it: 7 bytes.
-- **Shader Minifier does not catch shadowing.** Adding `out vec4 colour` to a shader with a
-  local `vec3 colour` minified to `vec3 l ... l = vec4(...)`, which the driver rejects; the
-  build itself succeeds. Look at the minified output, or run Debug with `-MinifyShaders`
-  and compare frames, after renaming anything that shaders share.
-- A shader without `#version` cannot use `layout(location = N)`; with `#version 430` it
-  must write an `out` variable instead of `gl_FragColor`.
-
-## Where the bytes are (3886, before round two, from the Crinkler report)
-
-Compressed: the shaders about 1,480 (vertex 541, compute 549, background 325, sprite 67),
-the audio code about 1,150 (`GenerateOcean` alone 859), the main function 429, the OpenGL
-name table 97, the loader 34. The C side of the graphics is only about 560 bytes, much of
-it window and context setup that every intro has. A simpler rendering engine cannot win
-much more than a few tens of bytes there; the shaders and the synthesizer are where the
-big savings are.
-
-## Worth trying next
-
-1. A simpler engine, measured: one program for both the background and the points (a
-   vertex shader that tells the `glRecti` quad from the sprites, one fragment shader with
-   a branch) removes one program's create, attach, link and uniform calls, but adds GLSL.
-   Probably a few tens of bytes either way; only a full build can say.
-2. The audio code, the largest C item: look for `(float)` of unsigned values, float
-   arguments, divisions and modulo by constants and nested loops with computed indices,
-   with an assembly listing (`/FAs`), as NUTS did (its synthesizer is about 600 bytes).
-3. The compute and vertex shaders: repeated maths that can share one function, and tables
-   that are a formula (`vec4(.07, .035, .0175, .00875)[i]` is `.07 / exp2(i)`).
+1. One program for both the background and the points: a vertex shader that tells the `glRecti` quad from the sprites and one fragment shader with a branch. It removes one program's create, attach, link and uniform calls but adds GLSL, probably a few tens of bytes either way.
+2. The audio code, the largest C item: look for `(float)` of unsigned values, float arguments, divisions and modulo by constants, and nested loops with computed indices, using an assembly listing (`/FAs`). NUTS' synthesizer is about 600 bytes.
+3. The compute and vertex shaders: repeated maths that can share one function.
