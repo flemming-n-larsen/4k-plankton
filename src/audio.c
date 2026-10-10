@@ -207,18 +207,15 @@ static float __vectorcall Waypoint(int slot, int period) {
 // image. Nothing here is a sample or a sequence - the swells are still the
 // random waypoints, with a scripted macro envelope over the top. Because the
 // buffer is one shot rather than a loop, it needs no crossfade at all.
+static short pcm[RUN_SAMPLES];
+
 static void* GenerateOcean(void) {
-    short* pcm = (short*)VirtualAlloc(0, RUN_SAMPLES * 2, MEM_COMMIT, PAGE_READWRITE);
     int i;
     float surf1 = 0.f, surf2 = 0.f, foam1 = 0.f, foam2 = 0.f, foam3 = 0.f, previous_white = 0.f;
     float accent = 0.f, accent_ratio = 1.f;
     int bubble_counter = SAMPLE_RATE, bubble_age = 0, bubble_length = 0, bubble_chain = 0, bubble_delay = 0;
     int logo_chain_started = 0;
     float bubble_frequency = 0.f;
-#ifdef DEBUG
-    if (!pcm) return 0;
-#endif
-
     rng_state = AUDIO_SEED;
     for (i = 0; i < RUN_SAMPLES; i++) {
         float white = NextNoise();
@@ -362,7 +359,7 @@ void AudioStart(void) {
     fallback_ticks = GetTickCount();
     // Written so the generated sound can be reviewed outside the running
     // intro; not part of the Compo path.
-    if (header.data) {
+    {
         DWORD written;
         HANDLE file = CreateFileA("ocean.wav", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
         if (file != INVALID_HANDLE_VALUE) {
@@ -371,8 +368,8 @@ void AudioStart(void) {
             CloseHandle(file);
         }
     }
-    // Without a buffer or a device the intro still runs, on the tick count.
-    if (!header.data || waveOutOpen(&device, (UINT)-1, &format, 0, 0, 0)) { device = 0; return; }
+    // Without a device the intro still runs, on the tick count.
+    if (waveOutOpen(&device, (UINT)-1, &format, 0, 0, 0)) { device = 0; return; }
 #else
     // No fallbacks in the Compo build: the compo machines have a sound device,
     // and without one there is nothing to hear.
