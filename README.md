@@ -23,7 +23,7 @@ Open PowerShell 7 in the repository root. The script sets up the MSVC environmen
 .\build.ps1 -Release                      # three Compo builds copied to release\
 ```
 
-Outputs, including the executable and the Crinkler, size and toolchain reports, go under `out\` and are not tracked. `-Release` copies `plankton.exe` (current desktop resolution) and the fixed-size `plankton_1920x1080.exe` and `plankton_1280x720.exe` to `release\`, which is tracked. One fixed size can be built with `.\build.ps1 -Resolution 1280x720`, which goes to `out\Compo-1280x720\`. `release\info.txt` is the compo's information file and is maintained by hand.
+Outputs, including the executable and the Crinkler, size and toolchain reports, go under `out\` and are not tracked. `-Release` copies `plankton.exe` (current desktop resolution) and the fixed-size `plankton_1920x1080.exe` and `plankton_1280x720.exe` to `release\`, which is tracked. One fixed size can be built with `.\build.ps1 -Resolution 1280x720`, which goes to `out\Compo-1280x720\`. `release\plankton.nfo` is the compo's information file and is maintained by hand.
 
 Escape exits both builds. The Compo build also exits by itself at the end of the run.
 
