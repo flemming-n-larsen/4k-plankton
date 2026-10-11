@@ -410,7 +410,7 @@ void __cdecl WinMainCRTStartup(void) {
         // The sound's position is the only clock. The picture starts when the
         // sound does and then follows it sample for sample, so the two cannot
         // drift apart whatever the device's start-up delay or clock rate.
-        now = (float)AudioSamples() * (1.f / AUDIO_SAMPLE_RATE);
+        now = (float)AudioSamples() * (1.f / AUDIO_SAMPLE_RATE) - .05f;
 #ifndef DEBUG
         if (sim_time >= END_SECONDS) break;
 #endif
