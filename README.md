@@ -4,6 +4,8 @@ Plankton is a 4,096-byte Windows intro for the [TRSAC](https://trsac.dk/realtime
 
 The 65-second run is an ascent from dark water toward the light, a wave of light through the swarm, the word NUTS assembled letter by letter, and a rubber duck, the TRSAC mascot. The word and the duck each dissolve back into living cells.
 
+It placed 4th in the Combined Intro competition at TRSAC 2026. Watch it on [YouTube](https://www.youtube.com/watch?v=RcUpAMERlE8); production details and comments are on [Demozoo](https://demozoo.org/productions/399218/).
+
 It is a CRT-free Win32/x86 executable built with a headless toolchain (MSVC, PowerShell, Shader Minifier, Crinkler). It needs no Visual Studio, Visual Studio Code or CMake.
 
 - Design and decisions: [docs/architecture.md](docs/architecture.md)
