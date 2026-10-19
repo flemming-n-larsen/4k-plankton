@@ -24,7 +24,7 @@ It is a CRT-free Win32/x86 executable running a 3D Particle Life simulation in a
 ## Toolchain and reproducibility
 
 - Treat `tools.lock.json` as authoritative for required tool versions and hashes.
-- Do not silently upgrade MSVC, the Windows SDK, Crinkler, PowerShell, or other size-sensitive tools.
+- Do not silently upgrade MSVC, the Windows SDK, Crinkler, Shader Minifier, or other size-sensitive tools. PowerShell is only required to be 7.x.
 - Any tool upgrade requires rebuilding Debug and Compo, comparing executable size and hashes, and updating the lockfile deliberately.
 - `.tools/` contains local third-party tools and must not be committed.
 - `out/` contains generated build artifacts and must not be committed.

@@ -64,7 +64,8 @@ function Get-Toolchain([bool]$RequireCrinkler) {
     if ($compilerVersion -ne $toolLock.tools.msvc.compilerFileVersion) { Fail "MSVC compiler mismatch: expected $($toolLock.tools.msvc.compilerFileVersion), found $compilerVersion." }
     if ($sdkVersion -ne $toolLock.tools.windowsSdk.toolchainVersion) { Fail "Windows SDK toolchain mismatch: expected $($toolLock.tools.windowsSdk.toolchainVersion), found $sdkVersion." }
     Test-WindowsSdkRelease
-    if ($PSVersionTable.PSVersion.ToString() -ne $toolLock.tools.powerShell.version) { Fail "PowerShell mismatch: expected $($toolLock.tools.powerShell.version), found $($PSVersionTable.PSVersion)." }
+    # Only the major version: PowerShell drives the build and never reaches the executable.
+    if ($PSVersionTable.PSVersion.Major -ne $toolLock.tools.powerShell.majorVersion) { Fail "PowerShell mismatch: expected $($toolLock.tools.powerShell.majorVersion).x, found $($PSVersionTable.PSVersion)." }
     $crinkler = Get-CrinklerPath
     if ($RequireCrinkler) {
         if (!(Test-Path -LiteralPath $crinkler)) { Fail "Crinkler $($toolLock.tools.crinkler.version) was not found at $crinkler. Download it into .tools or set IN4K_CRINKLER." }

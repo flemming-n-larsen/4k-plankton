@@ -21,7 +21,7 @@
       "toolchainVersion": "10.0.28000.0",
       "source": "https://learn.microsoft.com/en-us/windows/apps/windows-sdk/downloads"
     },
-    "powerShell": { "version": "7.6.6", "source": "https://github.com/PowerShell/PowerShell/releases/tag/v7.6.6" },
+    "powerShell": { "majorVersion": 7, "source": "https://github.com/PowerShell/PowerShell/releases" },
     "crinkler": {
       "version": "3.0b",
       "relativePath": ".tools/crinkler/3.0b/crinkler30b/Win64/Crinkler.exe",
